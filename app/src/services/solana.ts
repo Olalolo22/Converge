@@ -44,7 +44,7 @@ export const ER_WS = 'wss://devnet-router.magicblock.app';
 // Program constants (matches lib.rs)
 // ─────────────────────────────────────────────
 export const PROGRAM_ID = new PublicKey(
-  '9VnuYqz9fkambuAVxXWkHGtf1EpzLzchSFDRvpSwNLWU'
+  'DYRQJTnz2ehCexSjqiKFVt5jfJSNXN1e915AMboHHQz5'
 );
 const SESSION_SEED = Buffer.from('converge_session');
 const RECORD_SEED = Buffer.from('converge_record');
