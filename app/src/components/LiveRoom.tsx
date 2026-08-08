@@ -50,7 +50,9 @@ export function LiveRoom({
   const [signError, setSignError] = useState('');
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const expiryTs = Math.floor(Date.now() / 1000) + form.expiryMinutes * 60;
+  const expiryTs = useMemo(() => {
+    return Math.floor(Date.now() / 1000) + form.expiryMinutes * 60;
+  }, [form.expiryMinutes]);
 
   useEffect(() => {
     if (!simulator) return;
