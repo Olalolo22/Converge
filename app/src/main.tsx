@@ -1,5 +1,12 @@
+// ── Polyfills — must be first, before any Solana/React imports ──
 import { Buffer } from 'buffer';
-(window as any).Buffer = Buffer;
+window.Buffer = Buffer;
+(globalThis as any).Buffer = Buffer;
+
+// Ensure process is defined for packages that reference it
+if (!(globalThis as any).process) {
+  (globalThis as any).process = { env: {}, version: '', browser: true };
+}
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';

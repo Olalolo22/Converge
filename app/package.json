@@ -23,6 +23,7 @@
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
+    "@rollup/plugin-inject": "^5.0.5",
     "@types/canvas-confetti": "^1.6.4",
     "@types/node": "^22.5.4",
     "@types/react": "^18.3.5",
