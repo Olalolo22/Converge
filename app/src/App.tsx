@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   ConnectionProvider,
   WalletProvider,
@@ -20,17 +20,12 @@ import type {
   AppView,
   CreateRoomForm,
   ConvergeCommitRecord,
-  SimParticipant,
 } from './types/converge';
-import { DEMO_PARTICIPANTS } from './types/converge';
 import { hashToHex, ER_RPC } from './services/solana';
 import { createSimulator, ErSimulator } from './services/simulator';
 
 // ─────────────────────────────────────────────
-// Solana provider bridge — MUST be module-level.
-// Defining this inside App() creates a new component
-// type on every render, which unmounts children and
-// produces a blank screen.
+// Solana Provider Bridge (Module Level)
 // ─────────────────────────────────────────────
 const CP  = ConnectionProvider  as React.ComponentType<{ endpoint: string; children: React.ReactNode }>;
 const WP  = WalletProvider      as React.ComponentType<{ wallets: any[]; autoConnect: boolean; children: React.ReactNode }>;
@@ -47,7 +42,7 @@ function SolanaProviders({ children, wallets }: { children: React.ReactNode; wal
 }
 
 // ─────────────────────────────────────────────
-// App state
+// App Component
 // ─────────────────────────────────────────────
 interface SessionCtx {
   sessionId: string;
@@ -64,18 +59,9 @@ function App() {
   const [commitRecord, setCommitRecord] = useState<ConvergeCommitRecord | null>(null);
 
   const wallets = useMemo(
-    () => [
-      new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-    ],
+    () => [new PhantomWalletAdapter(), new SolflareWalletAdapter()],
     []
   );
-
-  // ── Handlers ──────────────────────────────────────────────────────
-
-  function handleModeChange(newMode: AppMode) {
-    setMode(newMode);
-  }
 
   function handleGoHome() {
     setView('home');
@@ -98,16 +84,9 @@ function App() {
     form: CreateRoomForm
   ) {
     const commitmentHash = hashToHex(commitmentHashBytes);
-
-    const ctx: SessionCtx = {
-      sessionId,
-      commitmentText,
-      commitmentHash,
-      form,
-    };
+    const ctx: SessionCtx = { sessionId, commitmentText, commitmentHash, form };
     setSession(ctx);
 
-    // Create simulator
     const expiryTs = Math.floor(Date.now() / 1000) + form.expiryMinutes * 60;
     const sim = createSimulator(
       sessionId,
@@ -117,7 +96,6 @@ function App() {
       form.quorum,
       expiryTs,
       (payload) => {
-        // Auto-commit callback
         const record: ConvergeCommitRecord = {
           session: sessionId,
           commitmentHash,
@@ -131,16 +109,6 @@ function App() {
       }
     );
 
-    // Auto-join demo participants if they're in the list
-    if (mode === 'simulator') {
-      // Pre-populate with Alice/Bob/Charlie if user chose demo addresses
-      DEMO_PARTICIPANTS.forEach((dp) => {
-        if (form.participantAddresses.includes(dp.pubkey)) {
-          // Don't auto-join — let the demo unfold naturally via quick-simulate buttons
-        }
-      });
-    }
-
     setSimulator(sim);
     setView('room');
   }
@@ -150,23 +118,12 @@ function App() {
     setView('proof');
   }
 
-  function handleExpired() {
-    // Room remains in view with EXPIRED state shown
-  }
-
-  // ── Page rendering ────────────────────────────────────────────────
-
   function renderContent() {
     switch (view) {
       case 'home':
         return <HomePage onStart={handleGoCreate} mode={mode} />;
       case 'create':
-        return (
-          <CreateRoom
-            mode={mode}
-            onSessionCreated={handleSessionCreated}
-          />
-        );
+        return <CreateRoom mode={mode} onSessionCreated={handleSessionCreated} />;
       case 'room':
         if (!session) return null;
         return (
@@ -178,7 +135,7 @@ function App() {
             form={session.form}
             simulator={mode === 'simulator' ? simulator : null}
             onCommitted={handleCommitted}
-            onExpired={handleExpired}
+            onExpired={() => {}}
           />
         );
       case 'proof':
@@ -199,163 +156,182 @@ function App() {
   return (
     <SolanaProviders wallets={wallets}>
       <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-        <Header
-          mode={mode}
-          onModeChange={handleModeChange}
-          onLogoClick={handleGoHome}
-        />
-        <main style={{ flex: 1 }}>
-          {renderContent()}
-        </main>
+        <Header mode={mode} onModeChange={setMode} onLogoClick={handleGoHome} />
+        <main style={{ flex: 1, paddingTop: '72px' }}>{renderContent()}</main>
       </div>
     </SolanaProviders>
   );
 }
 
 // ─────────────────────────────────────────────
-// Home page
+// Narrative Editorial Home Page
 // ─────────────────────────────────────────────
 function HomePage({ onStart, mode }: { onStart: () => void; mode: AppMode }) {
   return (
     <div className="page">
-      <div className="container">
-        {/* Hero */}
-        <section className="hero">
-          <div className="hero__eyebrow">
-            <span className="pulse-dot pulse-dot--green" />
-            MagicBlock Ephemeral Rollups · Solana Devnet
-          </div>
-          <h1 className="hero__title">
-            The Room Was Ephemeral.
-            <br />
-            <span>The Proof Is Permanent.</span>
-          </h1>
-          <p className="hero__subtitle">
-            Converge is a live, synchronous co-signature room on Solana.
-            Multiple wallets join a shared ephemeral session, sign a commitment in real-time,
-            and only the final proof settles to the blockchain.
-          </p>
-          <div className="hero__cta">
-            <button
-              id="hero-create-btn"
-              className="btn btn-primary"
-              style={{ padding: '0.9rem 2.5rem', fontSize: '1.05rem', borderRadius: 'var(--r-lg)' }}
-              onClick={onStart}
-            >
-              ✦ Open a Converge Room
-            </button>
-          </div>
-        </section>
+      {/* ── HERO WITH IMAGE STORY ── */}
+      <header className="hero">
+        <div className="hero__overlay" />
+        <div className="hero__vignette" />
 
-        {/* Architecture strip */}
-        <div className="info-strip">
+        <div className="hero__content">
+          <div className="hero__eyebrow">
+            <span className="pulse-dot pulse-dot--emerald" />
+            MAGICBLOCK EPHEMERAL ROLLUPS &middot; SOLANA DEVNET
+          </div>
+
+          <h1 className="hero__title">
+            <span>The Room Was Ephemeral.</span>
+            <span className="hero__title-italic">The Proof Is Permanent.</span>
+          </h1>
+        </div>
+
+        <div className="hero__footer">
+          <p className="hero__subtitle">
+            Multiple keys enter a zero-latency off-chain rollup chamber on MagicBlock. When quorum converges, a single atomic proof settles to Solana base layer.
+          </p>
+
+          <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+            <button className="btn btn--primary" onClick={onStart}>
+              ✦ Open Co-Signature Room
+            </button>
+            <a href="#how" className="btn btn--ghost">
+              View Architecture ↓
+            </a>
+          </div>
+        </div>
+      </header>
+
+      {/* ── TELEMETRY BAND ── */}
+      <section className="stats-band">
+        <div className="container">
+          <div className="stats-grid">
+            <div>
+              <div className="stat-item__val">&lt;10ms</div>
+              <div className="stat-item__lbl">Ephemeral Rollup Actions</div>
+            </div>
+            <div>
+              <div className="stat-item__val">1 Tx</div>
+              <div className="stat-item__lbl">Solana Base Settlement</div>
+            </div>
+            <div>
+              <div className="stat-item__val">100%</div>
+              <div className="stat-item__lbl">Atomic Quorum Proof</div>
+            </div>
+            <div>
+              <div className="stat-item__val">0 SOL</div>
+              <div className="stat-item__lbl">Gas Spent During Signing</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── SECTION 01: THE IMPERATIVE ── */}
+      <section id="problem" className="editorial-section">
+        <div className="container">
+          <div className="grid-problem">
+            <div style={{ position: 'sticky', top: '110px' }}>
+              <div className="section-label">01 // THE IMPERATIVE</div>
+              <h2 className="font-serif" style={{ fontSize: 'clamp(2.4rem,4.4vw,3.8rem)', lineHeight: 1.05 }}>
+                L1 Multi-Sig is slow, expensive, and blind to presence.
+              </h2>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', fontSize: '17px', color: 'var(--text-secondary)', lineHeight: 1.65 }}>
+              <p>
+                Every partial signature in traditional L1 multisig is a distinct base-layer transaction. Signers wait through block latency, pay transaction fees for partial states, and coordinate blind over Telegram—unaware of who is actually active in the signing session.
+              </p>
+              <p>
+                When timing matters—treasury approvals, emergency key rotations, or multi-party agreement locks—base layer transaction queues introduce dangerous delays and fragmented state history.
+              </p>
+              <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '24px', marginTop: '12px' }}>
+                <p className="font-serif" style={{ fontStyle: 'italic', fontSize: '1.8rem', color: 'var(--text-primary)', lineHeight: 1.3 }}>
+                  Signers need a live, zero-latency chamber—where actions happen instantaneously and only the final quorum settles to the blockchain.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── SECTION 02: PARADIGM SHIFT ── */}
+      <section className="editorial-section" style={{ background: 'var(--bg-dark)' }}>
+        <div className="container">
+          <div style={{ maxWidth: '720px', marginBottom: '50px' }}>
+            <div className="section-label">02 // PARADIGM SHIFT</div>
+            <h2 className="font-serif" style={{ fontSize: 'clamp(2.4rem,4.4vw,3.8rem)' }}>
+              Ephemeral Rollups vs Traditional L1 Multisig.
+            </h2>
+          </div>
+
+          <div className="grid-comparative">
+            <div className="panel-old">
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                Traditional L1 Multisig
+              </div>
+              <h3 className="font-serif" style={{ fontSize: '1.7rem', color: 'var(--text-secondary)' }}>
+                5 Signers = 5 Base Layer Transactions.
+              </h3>
+              <p style={{ fontSize: '15px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                Every key signature is pushed individually to Solana base layer. High fee overhead, noisy block history, and zero real-time presence awareness during signing.
+              </p>
+            </div>
+
+            <div className="panel-new">
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--emerald)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                Converge Ephemeral Chamber
+              </div>
+              <h3 className="font-serif" style={{ fontSize: '1.7rem', color: 'var(--text-primary)' }}>
+                Sub-10ms Chamber Signatures. 1 Settlement Tx.
+              </h3>
+              <p style={{ fontSize: '15px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                Session PDA is delegated to a MagicBlock Ephemeral Rollup validator. Presence heartbeats sync live off-chain. Upon quorum, the state flushes back to Solana base layer in 1 single atomic transaction.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── SECTION 03: HOW IT WORKS ── */}
+      <section id="how" className="editorial-section">
+        <div className="container">
+          <div style={{ maxWidth: '720px', marginBottom: '60px' }}>
+            <div className="section-label">03 // ARCHITECTURE</div>
+            <h2 className="font-serif" style={{ fontSize: 'clamp(2.4rem,4.4vw,3.8rem)' }}>
+              From Ephemeral Chamber to Permanent Solana Proof.
+            </h2>
+          </div>
+
           {[
             {
-              icon: '⚡',
-              value: '<10ms',
-              label: 'Ephemeral Rollup actions',
-              color: 'var(--accent-teal)',
+              num: '01',
+              title: 'Delegation & Chamber Init',
+              body: 'The session creator defines the participant pubkey whitelist and quorum threshold. The ConvergeSession PDA is initialized on Solana base layer and immediately delegated to MagicBlock Ephemeral Rollup.',
             },
             {
-              icon: '🔗',
-              value: '1 Tx',
-              label: 'Solana settlement',
-              color: 'var(--accent-purple)',
+              num: '02',
+              title: 'Synchronous Live Chamber',
+              body: 'Wallets connect to the Ephemeral Rollup RPC (<10ms latency). High-frequency heartbeat ticks verify participant presence in real-time. Signing actions execute in-memory with zero SOL gas spent per signature.',
             },
             {
-              icon: '👥',
-              value: 'Live',
-              label: 'Synchronous presence',
-              color: 'var(--accent-blue)',
+              num: '03',
+              title: 'Atomic Settlement & Proof',
+              body: 'When ER detects signed count ≥ quorum, MagicBlock flushes the session state back to Solana base layer, undelegating the PDA and creating an immutable ConvergeCommitRecord account as permanent proof.',
             },
-            {
-              icon: '🔒',
-              value: 'Atomic',
-              label: 'All or nothing proof',
-              color: 'var(--accent-pink)',
-            },
-          ].map((item, i) => (
-            <div key={i} className="info-strip__item">
-              <span className="info-strip__value" style={{ background: `linear-gradient(135deg, ${item.color}, var(--accent-teal))`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-                {item.value}
-              </span>
-              <div className="info-strip__label">{item.label}</div>
+          ].map((step) => (
+            <div key={step.num} className="step-row">
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--emerald)', letterSpacing: '0.08em' }}>
+                {step.num}
+              </div>
+              <div className="font-serif" style={{ fontSize: '1.7rem', lineHeight: 1.1 }}>
+                {step.title}
+              </div>
+              <div style={{ fontSize: '16px', color: 'var(--text-secondary)', lineHeight: 1.65 }}>
+                {step.body}
+              </div>
             </div>
           ))}
         </div>
-
-        {/* Architecture diagram card */}
-        <div className="card mt-3" style={{ marginTop: '2rem' }}>
-          <div className="card__header">
-            <span style={{ fontWeight: 700 }}>How it works</span>
-          </div>
-          <div className="card__body">
-            <div className="grid-2" style={{ gap: '1.5rem' }}>
-              {/* ER side */}
-              <div style={{ padding: '1.25rem', borderRadius: 'var(--r-md)', background: 'rgba(153,69,255,0.06)', border: '1px solid var(--border-purple)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-                  <span className="pulse-dot pulse-dot--purple" />
-                  <strong style={{ fontSize: '0.9rem', color: 'var(--accent-purple)' }}>
-                    MagicBlock Ephemeral Rollup
-                  </strong>
-                </div>
-                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {[
-                    '→ Participant presence',
-                    '→ Heartbeat / keep-alive',
-                    '→ Signing progress',
-                    '→ Quorum detection',
-                    '→ Session lifecycle',
-                  ].map((item) => (
-                    <li key={item} style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-                <div style={{ marginTop: '1rem', fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                  Sub-10ms · no L1 write per action
-                </div>
-              </div>
-
-              {/* Solana side */}
-              <div style={{ padding: '1.25rem', borderRadius: 'var(--r-md)', background: 'rgba(20,241,149,0.04)', border: '1px solid var(--border-teal)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-                  <span className="pulse-dot pulse-dot--green" />
-                  <strong style={{ fontSize: '0.9rem', color: 'var(--accent-teal)' }}>
-                    Solana Base Layer
-                  </strong>
-                </div>
-                <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {[
-                    '→ Session configuration',
-                    '→ ER delegation record',
-                    '→ Final commitment hash',
-                    '→ Signing wallet list',
-                    '→ Settlement timestamp',
-                  ].map((item) => (
-                    <li key={item} style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-                <div style={{ marginTop: '1rem', fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                  1 final tx · immutable proof
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Demo mode note */}
-        {mode === 'simulator' && (
-          <div className="alert alert--warning mt-3">
-            <span>
-              <strong>Simulator mode active.</strong> You can demo the full live room flow without a funded wallet.
-              Switch to <strong>Real ER</strong> mode in the header to use actual MagicBlock Ephemeral Rollup endpoints for judging.
-            </span>
-          </div>
-        )}
-      </div>
+      </section>
     </div>
   );
 }

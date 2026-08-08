@@ -10,47 +10,41 @@ interface HeaderProps {
 }
 
 export function Header({ mode, onModeChange, onLogoClick }: HeaderProps) {
-  const { connected } = useWallet();
-
   return (
     <header className="header">
       <div className="header__inner">
-        {/* Logo */}
-        <div className="header__logo" onClick={onLogoClick}>
+        {/* Brand */}
+        <div className="header__brand" onClick={onLogoClick}>
           <div className="header__logo-mark">C</div>
-          <span className="header__logo-name">Converge</span>
+          <span className="header__brand-name">Converge</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-muted)', borderLeft: '1px solid var(--border-subtle)', paddingLeft: '0.75rem' }}>
+            MagicBlock ER
+          </span>
         </div>
 
-        {/* ER status pill */}
-        <div className="badge badge-er" style={{ fontSize: '0.7rem' }}>
-          <span className="pulse-dot pulse-dot--purple" />
-          {mode === 'real' ? 'MagicBlock ER · Devnet' : 'Simulator Mode'}
-        </div>
-
-        <div className="header__spacer" />
-
-        <div className="header__actions">
-          {/* Mode toggle */}
-          <div className="mode-toggle">
+        {/* Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          {/* Mode switch */}
+          <div className="mode-switch">
             <button
               id="mode-btn-real"
-              className={`mode-toggle__btn ${mode === 'real' ? 'mode-toggle__btn--active' : ''}`}
+              className={`mode-switch__btn ${mode === 'real' ? 'mode-switch__btn--active' : ''}`}
               onClick={() => onModeChange('real')}
-              title="Use real MagicBlock ER endpoints (primary demo path)"
+              title="Use real MagicBlock Ephemeral Rollup endpoint"
             >
-              🔗 Real ER
+              Real ER
             </button>
             <button
               id="mode-btn-sim"
-              className={`mode-toggle__btn ${mode === 'simulator' ? 'mode-toggle__btn--active' : ''}`}
+              className={`mode-switch__btn ${mode === 'simulator' ? 'mode-switch__btn--active' : ''}`}
               onClick={() => onModeChange('simulator')}
-              title="In-memory simulator for offline demo"
+              title="In-memory simulator mode"
             >
-              🧪 Sim
+              Simulator
             </button>
           </div>
 
-          {/* Wallet connect */}
+          {/* Wallet button */}
           <WalletMultiButton />
         </div>
       </div>
