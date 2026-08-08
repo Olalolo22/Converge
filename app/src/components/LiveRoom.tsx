@@ -1,14 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { CheckCircle2, Circle, Heart, LogIn, Pen, Timer, Users, Zap } from 'lucide-react';
 import type {
   ErSessionState,
   ErParticipantState,
   AppMode,
   CreateRoomForm,
-  CommitPayload,
   ConvergeCommitRecord,
-  SimParticipant,
 } from '../types/converge';
 import { DEMO_PARTICIPANTS } from '../types/converge';
 import { formatCountdown } from '../services/solana';
@@ -29,25 +26,10 @@ function shortenAddr(addr: string): string {
   return addr.length > 12 ? `${addr.slice(0, 4)}…${addr.slice(-4)}` : addr;
 }
 
-function getParticipantLabel(pubkey: string, form: CreateRoomForm): string {
+function getParticipantLabel(pubkey: string): string {
   const demo = DEMO_PARTICIPANTS.find((p) => p.pubkey === pubkey);
   if (demo) return demo.name;
   return shortenAddr(pubkey);
-}
-
-function getParticipantColor(pubkey: string): string {
-  const demo = DEMO_PARTICIPANTS.find((p) => p.pubkey === pubkey);
-  if (demo) return demo.color;
-  // Deterministic color from pubkey
-  const colors = ['#a78bfa', '#34d399', '#60a5fa', '#f472b6', '#fbbf24'];
-  const idx = pubkey.charCodeAt(0) % colors.length;
-  return colors[idx];
-}
-
-function getInitial(pubkey: string): string {
-  const demo = DEMO_PARTICIPANTS.find((p) => p.pubkey === pubkey);
-  if (demo) return demo.name[0];
-  return pubkey[0].toUpperCase();
 }
 
 export function LiveRoom({
@@ -64,21 +46,17 @@ export function LiveRoom({
 
   const [erState, setErState] = useState<ErSessionState | null>(null);
   const [countdown, setCountdown] = useState('');
-  const [myParticipant, setMyParticipant] = useState<ErParticipantState | null>(null);
   const [isSigning, setIsSigning] = useState(false);
-  const [isJoining, setIsJoining] = useState(false);
   const [signError, setSignError] = useState('');
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const expiryTs = Math.floor(Date.now() / 1000) + form.expiryMinutes * 60;
 
-  // Subscribe to simulator state
   useEffect(() => {
     if (!simulator) return;
     const unsub = simulator.subscribe((state) => {
       setErState(state);
 
-      // Check if committed
       if (state.status === 'COMMITTED') {
         const signedPubkeys = state.participants.filter((p) => p.signed).map((p) => p.pubkey);
         const record: ConvergeCommitRecord = {
@@ -92,7 +70,6 @@ export function LiveRoom({
         onCommitted(record);
       }
 
-      // Check expired
       if (state.status === 'EXPIRED') {
         onExpired();
       }
@@ -100,59 +77,37 @@ export function LiveRoom({
     return unsub;
   }, [simulator, sessionId, commitmentHash, onCommitted, onExpired]);
 
-  // Track my participant
+  // Countdown timer tick
   useEffect(() => {
-    if (!erState || !publicKey) return;
-    const me = erState.participants.find((p) => p.pubkey === publicKey.toBase58());
-    setMyParticipant(me ?? null);
-  }, [erState, publicKey]);
+    const timer = setInterval(() => {
+      setCountdown(formatCountdown(expiryTs));
+    }, 1000);
+    setCountdown(formatCountdown(expiryTs));
+    return () => clearInterval(timer);
+  }, [expiryTs]);
 
-  // Countdown timer
-  useEffect(() => {
-    const tick = () => {
-      const ts = erState?.expiryTs ?? expiryTs;
-      const c = formatCountdown(ts);
-      setCountdown(c);
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [erState?.expiryTs, expiryTs]);
-
-  // Auto-join in simulator if my wallet is a participant
-  useEffect(() => {
-    if (!simulator || !publicKey || mode !== 'simulator') return;
-    const myAddr = publicKey.toBase58();
-    if (form.participantAddresses.includes(myAddr)) {
-      simulator.join(myAddr);
-    }
-  }, [simulator, publicKey, form.participantAddresses, mode]);
-
-  // Auto-heartbeat
+  // Auto-join connected wallet to simulator session
   useEffect(() => {
     if (!simulator || !publicKey) return;
-    const myAddr = publicKey.toBase58();
-    heartbeatRef.current = setInterval(() => {
-      try { simulator.heartbeat(myAddr); } catch (_) {}
-    }, 5000);
+    const userPubkey = publicKey.toBase58();
+    if (form.participantAddresses.includes(userPubkey)) {
+      simulator.join(userPubkey);
+
+      heartbeatRef.current = setInterval(() => {
+        simulator.heartbeat(userPubkey);
+      }, 5000);
+    }
     return () => {
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     };
-  }, [simulator, publicKey]);
+  }, [simulator, publicKey, form.participantAddresses]);
 
-  function handleJoin(pubkey: string) {
-    if (!simulator) return;
-    setIsJoining(true);
-    try {
-      simulator.join(pubkey);
-    } catch (e: any) {
-      setSignError(e?.message ?? 'Failed to join');
-    } finally {
-      setIsJoining(false);
-    }
+  function handleJoinSelf() {
+    if (!simulator || !publicKey) return;
+    simulator.join(publicKey.toBase58());
   }
 
-  function handleSign() {
+  function handleSignSelf() {
     if (!simulator || !publicKey) return;
     setSignError('');
     setIsSigning(true);
@@ -165,307 +120,217 @@ export function LiveRoom({
     }
   }
 
-  function handleSimParticipantAction(demo: SimParticipant) {
+  function handleSimulateParticipantAction(pubkey: string, action: 'join' | 'sign') {
     if (!simulator) return;
-    const state = simulator.getState();
-    const p = state.participants.find((x) => x.pubkey === demo.pubkey);
-    if (!p) return;
-
-    if (!p.present) {
-      simulator.join(demo.pubkey);
-    } else if (!p.signed) {
-      simulator.sign(demo.pubkey);
-    }
+    if (action === 'join') simulator.join(pubkey);
+    if (action === 'sign') simulator.sign(pubkey);
   }
 
-  const status = erState?.status ?? 'OPEN';
+  const myPubkeyStr = publicKey?.toBase58();
+  const myState = erState?.participants.find((p) => p.pubkey === myPubkeyStr);
   const signedCount = erState?.signedCount ?? 0;
-  const hasQuorum = erState?.hasQuorum ?? false;
-  const participants = erState?.participants ?? form.participantAddresses.map((pk) => ({
-    pubkey: pk,
-    present: false,
-    signed: false,
-    lastHeartbeat: 0,
-  }));
-
-  const remaining = Math.max(0, expiryTs - Math.floor(Date.now() / 1000));
-  const isWarning = remaining < 60;
-  const isDanger = remaining < 15;
-
-  const countdownClass = isDanger
-    ? 'countdown--danger'
-    : isWarning
-    ? 'countdown--warning'
-    : '';
-
-  const statusBadgeClass =
-    status === 'COMMITTED' ? 'badge-committed' :
-    status === 'EXPIRED'   ? 'badge-expired' :
-    status === 'COMMITTING'? 'badge-signed' :
-    'badge-open';
-
-  const iAmParticipant = publicKey && form.participantAddresses.includes(publicKey.toBase58());
-  const iAmPresent = myParticipant?.present ?? false;
-  const iAmSigned = myParticipant?.signed ?? false;
-  const canSign = iAmPresent && !iAmSigned && (status === 'OPEN' || status === 'SIGNING');
+  const quorum = erState?.quorum ?? form.quorum;
+  const quorumPercentage = Math.min(100, Math.round((signedCount / quorum) * 100));
 
   return (
-    <div className="page animate-fade-in">
-      <div className="container">
-        {/* ── Room header ── */}
-        <div className="room-header">
-          <div>
-            <h1 className="room-title">
-              Converge Room
-            </h1>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.5rem' }}>
-              <span className={`badge ${statusBadgeClass}`}>
-                <span className={`pulse-dot ${
-                  status === 'COMMITTED' ? 'pulse-dot--green' :
-                  status === 'EXPIRED' ? 'pulse-dot--gray' :
-                  'pulse-dot--green'
-                }`} />
-                {status}
-              </span>
-              {form.context && (
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                  {form.context}
-                </span>
+    <div className="page" style={{ padding: '0 0 80px 0' }}>
+      {/* ── CHAMBER HERO BANNER ── */}
+      <div style={{ position: 'relative', minHeight: '380px', backgroundImage: "url('/chamber-bg.png')", backgroundSize: 'cover', backgroundPosition: 'center 30%', display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', padding: '100px 0 50px' }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, rgba(8,8,10,0.85) 0%, rgba(18,18,23,0.7) 100%)' }} />
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '40%', background: 'linear-gradient(to top, var(--bg-void), transparent)' }} />
+
+        <div className="container" style={{ position: 'relative', zIndex: 2 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '20px' }}>
+            <div>
+              <div className="section-label">
+                <span className="pulse-dot pulse-dot--emerald" />
+                LIVE EPHEMERAL ROLLUP CHAMBER // SUB-10MS LATENCY
+              </div>
+              <h1 className="font-serif" style={{ fontSize: 'clamp(2.5rem, 5.5vw, 4.5rem)', lineHeight: 1.05 }}>
+                {form.context || 'Co-Signature Chamber'}
+              </h1>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                SESSION ID: {sessionId} &middot; DELEGATED TO MAGICBLOCK ER
+              </div>
+            </div>
+
+            {/* Countdown & Quorum Telemetry */}
+            <div style={{ display: 'flex', gap: '16px' }}>
+              <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', padding: '14px 20px', borderRadius: '4px', textAlign: 'right' }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                  Chamber Expiry
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.8rem', color: 'var(--amber)', fontWeight: 500 }}>
+                  {countdown}
+                </div>
+              </div>
+
+              <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--emerald-border)', padding: '14px 20px', borderRadius: '4px', textAlign: 'right' }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--emerald)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                  Quorum Status
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.8rem', color: 'var(--emerald)', fontWeight: 600 }}>
+                  {signedCount} / {quorum}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="container" style={{ marginTop: '40px' }}>
+        {/* Progress Bar */}
+        <div style={{ marginBottom: '32px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-secondary)' }}>
+            <span>QUORUM CONVERGENCE PROGRESS</span>
+            <span>{quorumPercentage}% SATISFIED</span>
+          </div>
+          <div style={{ height: '4px', background: 'var(--bg-card)', borderRadius: '2px', overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ height: '100%', width: `${quorumPercentage}%`, background: 'var(--emerald)', transition: 'width 0.4s ease' }} />
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.3fr) minmax(0, 0.9fr)', gap: '30px' }}>
+          {/* Left Column: Agreement & Key Action */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* Agreement Terms */}
+            <div className="panel">
+              <div className="section-label">AGREEMENT COMMITMENT STATEMENT</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '14px', lineHeight: 1.65, color: 'var(--text-primary)', background: 'var(--bg-input)', padding: '18px', border: '1px solid var(--border-subtle)', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
+                {commitmentText}
+              </div>
+              <div style={{ marginTop: '12px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-mono)', wordBreak: 'break-all' }}>
+                SHA-256: {commitmentHash}
+              </div>
+            </div>
+
+            {/* My Key Action Box */}
+            <div className="panel" style={{ border: '1px solid var(--emerald-border)' }}>
+              <div className="section-label">YOUR SIGNING IDENTITY</div>
+              {publicKey ? (
+                <div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--text-primary)', marginBottom: '16px' }}>
+                    Connected Key: {publicKey.toBase58()}
+                  </div>
+
+                  {!myState?.present ? (
+                    <button type="button" className="btn btn--ghost" onClick={handleJoinSelf} style={{ width: '100%' }}>
+                      + Step into Chamber (Join Session)
+                    </button>
+                  ) : myState?.signed ? (
+                    <div style={{ padding: '14px', background: 'var(--emerald-dim)', border: '1px solid var(--emerald-border)', color: 'var(--emerald)', fontFamily: 'var(--font-mono)', fontSize: '12px', borderRadius: '4px', textAlign: 'center' }}>
+                      ✓ Your signature is registered in the Ephemeral Rollup state chamber.
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn--emerald"
+                      onClick={handleSignSelf}
+                      disabled={isSigning}
+                      style={{ width: '100%', padding: '16px', fontSize: '12px' }}
+                    >
+                      {isSigning ? 'Signing in ER State...' : '✦ Sign Agreement (Zero Gas)'}
+                    </button>
+                  )}
+
+                  {signError && (
+                    <div style={{ marginTop: '10px', color: 'var(--crimson)', fontFamily: 'var(--font-mono)', fontSize: '11px' }}>
+                      {signError}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
+                  Connect your Solana wallet using the header button to sign this session.
+                </div>
               )}
             </div>
           </div>
 
-          {/* Countdown + quorum counter */}
-          <div style={{ textAlign: 'right' }}>
-            <div className={`countdown ${countdownClass}`}>
-              {status === 'EXPIRED' ? '00:00' : countdown}
-            </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              {status === 'EXPIRED' ? 'SESSION EXPIRED' : 'REMAINING'}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Signed counter + progress ── */}
-        <div className="card mb-2">
-          <div className="card__body">
-            <div className="flex-between mb-2" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
-              <div>
-                <div className="signed-counter">
-                  {signedCount} / {form.quorum}
-                </div>
-                <div className="signed-counter-label">Signatures</div>
-              </div>
-
-              <div style={{ textAlign: 'right', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                <div><strong>{form.participantAddresses.length}</strong> participants</div>
-                <div><strong>{form.quorum}</strong> required</div>
-              </div>
-            </div>
-
-            <div className="progress-container">
-              <div
-                className="progress-bar"
-                style={{ width: `${Math.min(100, (signedCount / form.quorum) * 100)}%` }}
-              />
-            </div>
-
-            {hasQuorum && status !== 'COMMITTED' && (
-              <div className="alert alert--success mt-2">
-                <Zap size={16} />
-                <span>
-                  <strong>QUORUM REACHED</strong> — Committing to Solana via MagicBlock ER…
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="grid-2">
-          {/* ── Commitment ── */}
-          <div className="card">
-            <div className="card__header flex-center gap-1">
-              <Pen size={14} style={{ color: 'var(--accent-teal)' }} />
-              <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Commitment</span>
-            </div>
-            <div className="card__body">
-              <div className="commitment-box">
-                <div className="commitment-text">{commitmentText}</div>
-                <div className="commitment-hash">
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.65rem' }}>SHA-256</span>
-                  <br />
-                  {commitmentHash}
-                </div>
-              </div>
-
-              {/* ER vs Solana status note */}
-              <div className="alert alert--info mt-2" style={{ fontSize: '0.8rem' }}>
-                <span className="pulse-dot pulse-dot--purple" style={{ flexShrink: 0, marginTop: 2 }} />
-                <span>
-                  Presence &amp; signing tracked in <strong>MagicBlock ER</strong>.
-                  No Solana tx per action — only final commit settles to base layer.
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* ── Participants ── */}
-          <div className="card">
-            <div className="card__header flex-center gap-1">
-              <Users size={14} style={{ color: 'var(--accent-purple)' }} />
-              <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Participants</span>
-            </div>
-            <div className="card__body">
-              <div className="participants-list">
-                {participants.map((p) => (
-                  <div
-                    key={p.pubkey}
-                    className={`participant-card ${p.present ? 'participant-card--present' : ''} ${p.signed ? 'participant-card--signed' : ''}`}
-                  >
-                    {/* Avatar */}
+          {/* Right Column: Participant Presence Map */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div className="panel">
+              <div className="section-label">SIGNER PRESENCE RADAR</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {erState?.participants.map((p) => {
+                  const isMe = p.pubkey === myPubkeyStr;
+                  const label = getParticipantLabel(p.pubkey);
+                  return (
                     <div
-                      className="participant-avatar"
-                      style={{
-                        background: `${getParticipantColor(p.pubkey)}22`,
-                        color: getParticipantColor(p.pubkey),
-                        border: `1px solid ${getParticipantColor(p.pubkey)}44`,
-                      }}
+                      key={p.pubkey}
+                      className={`signer-row ${p.signed ? 'signer-row--signed' : ''}`}
                     >
-                      {getInitial(p.pubkey)}
-                    </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span className={`pulse-dot ${p.present ? 'pulse-dot--emerald' : 'dot--muted'}`} />
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--text-primary)', fontWeight: 500 }}>
+                            {label}
+                          </span>
+                          {isMe && (
+                            <span className="badge-tag badge-tag--active" style={{ fontSize: '9px', padding: '1px 5px' }}>
+                              You
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          {shortenAddr(p.pubkey)}
+                        </div>
+                      </div>
 
-                    {/* Info */}
-                    <div className="participant-info">
-                      <div className="participant-name">
-                        {getParticipantLabel(p.pubkey, form)}
-                        {publicKey?.toBase58() === p.pubkey && (
-                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginLeft: '0.4rem' }}>(you)</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {p.signed ? (
+                          <span className="badge-tag badge-tag--active" style={{ fontSize: '10px' }}>
+                            ✓ Signed
+                          </span>
+                        ) : p.present ? (
+                          <span className="badge-tag" style={{ fontSize: '10px' }}>
+                            Live in Room
+                          </span>
+                        ) : (
+                          <span className="badge-tag" style={{ fontSize: '10px', opacity: 0.5 }}>
+                            Absent
+                          </span>
+                        )}
+
+                        {/* Simulator Action Controls for Demo */}
+                        {mode === 'simulator' && !p.signed && (
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            {!p.present && (
+                              <button
+                                type="button"
+                                className="btn btn--ghost"
+                                style={{ padding: '4px 8px', fontSize: '9px' }}
+                                onClick={() => handleSimulateParticipantAction(p.pubkey, 'join')}
+                              >
+                                Join
+                              </button>
+                            )}
+                            {p.present && (
+                              <button
+                                type="button"
+                                className="btn btn--ghost"
+                                style={{ padding: '4px 8px', fontSize: '9px', borderColor: 'var(--emerald)' }}
+                                onClick={() => handleSimulateParticipantAction(p.pubkey, 'sign')}
+                              >
+                                Sign
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
-                      <div className="participant-pubkey">{shortenAddr(p.pubkey)}</div>
                     </div>
-
-                    {/* Status badges */}
-                    <div className="participant-badges">
-                      <span className={`badge ${p.present ? 'badge-present' : 'badge-absent'}`}>
-                        {p.present ? (
-                          <><span className="pulse-dot pulse-dot--green" /> PRESENT</>
-                        ) : (
-                          <><span className="pulse-dot pulse-dot--gray" /> ABSENT</>
-                        )}
-                      </span>
-                      <span className={`badge ${p.signed ? 'badge-signed' : 'badge-waiting'}`}>
-                        {p.signed ? (
-                          <><CheckCircle2 size={10} /> SIGNED</>
-                        ) : (
-                          <><Circle size={10} /> WAITING</>
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
-              {/* Simulator quick-controls */}
               {mode === 'simulator' && (
-                <div className="mt-3">
-                  <div className="section-label">Quick simulate</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                    {DEMO_PARTICIPANTS.filter((d) =>
-                      form.participantAddresses.includes(d.pubkey)
-                    ).map((demo) => {
-                      const p = participants.find((x) => x.pubkey === demo.pubkey);
-                      const action = !p?.present ? 'Join' : !p?.signed ? 'Sign' : '✓';
-                      return (
-                        <button
-                          key={demo.pubkey}
-                          id={`sim-btn-${demo.name.toLowerCase()}`}
-                          className="btn btn-ghost btn-sm"
-                          style={{
-                            borderColor: demo.color + '44',
-                            color: demo.color,
-                            fontSize: '0.75rem',
-                          }}
-                          disabled={action === '✓' || status !== 'OPEN' && status !== 'SIGNING'}
-                          onClick={() => handleSimParticipantAction(demo)}
-                        >
-                          {action} as {demo.name}
-                        </button>
-                      );
-                    })}
-                  </div>
+                <div style={{ marginTop: '16px', padding: '10px', background: 'rgba(0,0,0,0.4)', border: '1px solid var(--border-subtle)', borderRadius: '4px', fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)' }}>
+                  💡 SIMULATOR CONTROLS: Click &quot;Join&quot; or &quot;Sign&quot; on participant rows to simulate live co-signers reaching quorum.
                 </div>
               )}
             </div>
           </div>
         </div>
-
-        {/* ── My action panel ── */}
-        {iAmParticipant && status !== 'COMMITTED' && status !== 'EXPIRED' && (
-          <div className="card mt-2">
-            <div className="card__body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
-              <div>
-                <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Your status</div>
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                  <span className={`badge ${iAmPresent ? 'badge-present' : 'badge-absent'}`}>
-                    {iAmPresent ? '● PRESENT' : '○ ABSENT'}
-                  </span>
-                  <span className={`badge ${iAmSigned ? 'badge-signed' : 'badge-waiting'}`}>
-                    {iAmSigned ? '✓ SIGNED' : '○ NOT SIGNED'}
-                  </span>
-                </div>
-                {signError && (
-                  <div style={{ fontSize: '0.8rem', color: '#f87171', marginTop: '0.5rem' }}>{signError}</div>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                {!iAmPresent && (
-                  <button
-                    id="join-room-btn"
-                    className="btn btn-ghost"
-                    onClick={() => handleJoin(publicKey!.toBase58())}
-                    disabled={isJoining}
-                  >
-                    <LogIn size={16} />
-                    {isJoining ? 'Joining…' : 'Join Room'}
-                  </button>
-                )}
-
-                {iAmPresent && !iAmSigned && (
-                  <button
-                    id="sign-commitment-btn"
-                    className="btn btn-sign"
-                    onClick={handleSign}
-                    disabled={!canSign || isSigning}
-                  >
-                    {isSigning ? (
-                      <><span className="spinner" style={{ width: 18, height: 18 }} /> Signing via ER…</>
-                    ) : (
-                      <>✦ Sign Commitment</>
-                    )}
-                  </button>
-                )}
-
-                {iAmSigned && (
-                  <div className="btn btn-ghost" style={{ cursor: 'default', borderColor: 'var(--border-teal)', color: 'var(--accent-teal)' }}>
-                    <CheckCircle2 size={16} /> You signed
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Expired notice */}
-        {status === 'EXPIRED' && (
-          <div className="alert alert--error mt-2">
-            <span>
-              <strong>Session Expired</strong> — The room timed out before quorum was reached.
-              No CoSignCommitRecord was written to Solana.
-            </span>
-          </div>
-        )}
       </div>
     </div>
   );

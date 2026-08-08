@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import type { ConvergeCommitRecord } from '../types/converge';
 import { explorerUrl } from '../services/solana';
-import { CheckCircle2, ExternalLink, Shield, Clock, Users } from 'lucide-react';
 
 interface ProofViewProps {
   record: ConvergeCommitRecord;
@@ -24,7 +23,6 @@ function formatTs(ts: number): string {
 export function ProofView({ record, commitmentText, context, onNewRoom }: ProofViewProps) {
   const confettiFiredRef = useRef(false);
 
-  // Confetti celebration on mount
   useEffect(() => {
     if (confettiFiredRef.current) return;
     confettiFiredRef.current = true;
@@ -34,163 +32,144 @@ export function ProofView({ record, commitmentText, context, onNewRoom }: ProofV
       confetti({
         particleCount: 120,
         spread: 80,
-        origin: { y: 0.5 },
-        colors: ['#9945ff', '#14f195', '#60a5fa', '#f472b6'],
+        origin: { y: 0.4 },
+        colors: ['#10b981', '#a855f7', '#34d399', '#f4f4f5'],
       });
-      setTimeout(() => {
-        confetti({
-          particleCount: 60,
-          spread: 60,
-          origin: { y: 0.4 },
-          colors: ['#14f195', '#9945ff'],
-        });
-      }, 400);
     });
   }, []);
 
+  function handleCopyProofJson() {
+    const jsonStr = JSON.stringify({
+      protocol: 'Converge · MagicBlock Ephemeral Rollup',
+      sessionId: record.session,
+      context: context || 'Co-Signature Agreement',
+      commitmentText,
+      commitmentHash: record.commitmentHash,
+      erSessionHash: record.erSessionHash,
+      quorum: record.quorum,
+      signedCount: record.signedPubkeys.len ?? record.signedPubkeys.length,
+      signedPubkeys: record.signedPubkeys,
+      committedAt: record.committedAt,
+      timestampISO: new Date(record.committedAt * 1000).toISOString(),
+    }, null, 2);
+
+    navigator.clipboard.writeText(jsonStr);
+    alert('Canonical Proof JSON copied to clipboard!');
+  }
+
   return (
-    <div className="page animate-slide-up">
-      <div className="container">
-        <div className="proof-container">
-          {/* ── Hero ── */}
-          <div className="proof-icon">
-            <CheckCircle2 size={40} style={{ color: '#14f195' }} />
-          </div>
-
-          <h1 style={{ marginBottom: '0.5rem' }}>
-            <span style={{ background: 'var(--grad-brand)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-              Co-Signature Committed
-            </span>
-          </h1>
-
-          {context && (
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-              {context}
-            </p>
-          )}
-
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', marginBottom: '2.5rem', flexWrap: 'wrap' }}>
-            <span className="badge badge-committed">
-              <span className="pulse-dot pulse-dot--green" />
-              COMMITTED
-            </span>
-            <span className="badge badge-open">
-              ✦ Proof on Solana
-            </span>
-            <span className="badge" style={{ background: 'rgba(153,69,255,0.1)', color: 'var(--accent-purple)', border: '1px solid var(--border-purple)' }}>
-              Via MagicBlock ER
-            </span>
-          </div>
-
-          {/* ── Commitment proof card ── */}
-          <div className="card mb-2 text-left">
-            <div className="card__header flex-center gap-1">
-              <Shield size={16} style={{ color: 'var(--accent-teal)' }} />
-              <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Commitment</span>
-            </div>
-            <div className="card__body">
-              <div className="section-label">Signed text</div>
-              <div className="commitment-box mb-2" style={{ marginBottom: '1rem' }}>
-                <div className="commitment-text">{commitmentText}</div>
+    <div className="page" style={{ padding: '80px 0' }}>
+      <div className="container" style={{ maxWidth: '820px' }}>
+        {/* Certificate Container */}
+        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--emerald-border)', borderRadius: 'var(--r-md)', padding: '48px', position: 'relative', overflow: 'hidden' }}>
+          {/* Top Seal */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '24px' }}>
+            <div>
+              <div className="section-label" style={{ marginBottom: '6px' }}>
+                <span className="pulse-dot pulse-dot--emerald" />
+                VERIFIED SOLANA SETTLEMENT PROOF
               </div>
+              <h1 className="font-serif" style={{ fontSize: '2.5rem', lineHeight: 1.1 }}>
+                Canonical Co-Signature Certificate.
+              </h1>
+            </div>
 
-              <div className="section-label">SHA-256 commitment hash</div>
-              <div className="proof-hash">{record.commitmentHash}</div>
+            <span className="badge-tag badge-tag--active" style={{ fontSize: '11px', padding: '6px 14px' }}>
+              ✓ COMMITTED & UNDELEGATED
+            </span>
+          </div>
+
+          {/* Context & Metadata */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '28px' }}>
+            <div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                Session Context
+              </div>
+              <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.25rem', color: 'var(--text-primary)', marginTop: '4px' }}>
+                {context || 'Co-Signature Session'}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                Settlement Timestamp
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--text-primary)', marginTop: '6px' }}>
+                {formatTs(record.committedAt)}
+              </div>
             </div>
           </div>
 
-          {/* ── Signers ── */}
-          <div className="card mb-2 text-left">
-            <div className="card__header flex-between">
-              <div className="flex-center gap-1">
-                <Users size={16} style={{ color: 'var(--accent-purple)' }} />
-                <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Signers</span>
+          {/* Signed Text Box */}
+          <div style={{ marginBottom: '28px' }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '8px' }}>
+              Committed Agreement Statement
+            </div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', lineHeight: 1.6, background: 'var(--bg-input)', border: '1px solid var(--border-subtle)', padding: '16px', borderRadius: '4px', whiteSpace: 'pre-wrap', color: 'var(--text-primary)' }}>
+              {commitmentText}
+            </div>
+          </div>
+
+          {/* Cryptographic Hashes */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '32px' }}>
+            <div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                SHA-256 Commitment Hash
               </div>
-              <span className="badge badge-signed">
-                {record.signedPubkeys.length} / {record.quorum} quorum
+              <div className="proof-box" style={{ marginTop: '4px', padding: '10px 14px' }}>
+                {record.commitmentHash}
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                MagicBlock ER Session State Hash
+              </div>
+              <div className="proof-box" style={{ marginTop: '4px', padding: '10px 14px' }}>
+                {record.erSessionHash}
+              </div>
+            </div>
+          </div>
+
+          {/* Signers List */}
+          <div style={{ marginBottom: '36px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                Validated Signer Pubkeys ({record.signedPubkeys.length} of {record.quorum} Quorum Met)
               </span>
             </div>
-            <div className="card__body">
-              <div className="signer-pills">
-                {record.signedPubkeys.map((pk) => (
-                  <div key={pk} className="signer-pill">
-                    <CheckCircle2 size={12} style={{ color: 'var(--accent-teal)' }} />
-                    <code style={{ fontSize: '0.75rem' }}>{shortenAddr(pk)}</code>
-                  </div>
-                ))}
-              </div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {record.signedPubkeys.map((pubkey) => (
+                <div key={pubkey} className="signer-row--signed" style={{ padding: '8px 14px', borderRadius: '4px', border: '1px solid var(--emerald-border)', background: 'var(--emerald-dim)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: 'var(--emerald)', fontFamily: 'var(--font-mono)', fontSize: '11px' }}>✓</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-primary)' }}>
+                    {pubkey}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* ── Settlement metadata ── */}
-          <div className="card mb-3 text-left">
-            <div className="card__header flex-center gap-1">
-              <Clock size={16} style={{ color: 'var(--accent-amber)' }} />
-              <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Settlement</span>
-            </div>
-            <div className="card__body">
-              <div className="grid-2" style={{ gap: '1rem' }}>
-                <div>
-                  <div className="section-label">Committed at</div>
-                  <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                    {formatTs(record.committedAt)}
-                  </div>
-                </div>
-                <div>
-                  <div className="section-label">Session</div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-muted)', wordBreak: 'break-all' }}>
-                    {record.session}
-                  </div>
-                </div>
-              </div>
+          {/* Actions */}
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', borderTop: '1px solid var(--border-subtle)', paddingTop: '24px' }}>
+            <button type="button" className="btn btn--emerald" onClick={handleCopyProofJson}>
+              ✦ Copy Proof JSON
+            </button>
 
-              {record.erSessionHash && (
-                <div className="mt-2">
-                  <div className="section-label">ER session hash</div>
-                  <div className="proof-hash" style={{ fontSize: '0.7rem' }}>
-                    {record.erSessionHash}
-                  </div>
-                </div>
-              )}
+            <a
+              href={explorerUrl(record.session)}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn--ghost"
+            >
+              View on Solana Explorer ↗
+            </a>
 
-              {/* Solana Explorer link */}
-              {record.txSignature && (
-                <a
-                  id="explorer-link"
-                  href={explorerUrl(record.txSignature)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn-ghost mt-2 w-full"
-                  style={{ justifyContent: 'center' }}
-                >
-                  <ExternalLink size={16} />
-                  View on Solana Explorer
-                </a>
-              )}
-            </div>
+            <button type="button" className="btn btn--ghost" onClick={onNewRoom} style={{ marginLeft: 'auto' }}>
+              + Open New Room
+            </button>
           </div>
-
-          {/* ── ER narrative ── */}
-          <div className="alert alert--info mb-3" style={{ textAlign: 'left' }}>
-            <span className="pulse-dot pulse-dot--purple" style={{ flexShrink: 0, marginTop: 4 }} />
-            <span style={{ fontSize: '0.875rem', lineHeight: 1.6 }}>
-              <strong>The room was ephemeral. The proof is permanent.</strong>
-              <br />
-              All presence tracking, heartbeats, and signing happened inside the
-              MagicBlock Ephemeral Rollup — zero Solana writes per action.
-              Only this final <code>ConvergeCommitRecord</code> settled to Solana.
-            </span>
-          </div>
-
-          {/* ── CTA ── */}
-          <button
-            id="new-room-btn"
-            className="btn btn-primary w-full"
-            style={{ padding: '1rem', fontSize: '1rem', borderRadius: 'var(--r-lg)' }}
-            onClick={onNewRoom}
-          >
-            ✦ Create Another Room
-          </button>
         </div>
       </div>
     </div>

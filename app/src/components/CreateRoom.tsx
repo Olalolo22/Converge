@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
-import { Plus, Trash2, Hash, Clock, Users, Zap } from 'lucide-react';
 import type { CreateRoomForm, AppMode } from '../types/converge';
 import { computeCommitmentHash, hashToHex } from '../services/solana';
 
@@ -45,7 +44,6 @@ export function CreateRoom({ mode, onSessionCreated }: CreateRoomProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState('');
 
-  // Compute commitment hash in real-time as user types
   useEffect(() => {
     if (!form.commitmentText.trim()) {
       setCommitmentHash('');
@@ -57,13 +55,6 @@ export function CreateRoom({ mode, onSessionCreated }: CreateRoomProps) {
       setCommitmentHashBytes(bytes);
     });
   }, [form.commitmentText]);
-
-  // Add creator wallet to participants automatically when connected
-  useEffect(() => {
-    if (publicKey && !form.participantAddresses.includes(publicKey.toBase58())) {
-      // Don't auto-add — let creator choose
-    }
-  }, [publicKey]);
 
   function addAddress() {
     const addr = newAddress.trim();
@@ -113,7 +104,6 @@ export function CreateRoom({ mode, onSessionCreated }: CreateRoomProps) {
 
   async function handleCreate() {
     setError('');
-
     if (!form.commitmentText.trim()) {
       setError('Commitment text is required');
       return;
@@ -133,12 +123,8 @@ export function CreateRoom({ mode, onSessionCreated }: CreateRoomProps) {
 
     setIsCreating(true);
     try {
-      // In simulator mode: create a fake session ID and go straight to room
       const sessionId =
-        mode === 'simulator'
-          ? `sim-${Date.now()}`
-          : `real-${Date.now()}`; // placeholder until actual tx
-
+        mode === 'simulator' ? `sim-${Date.now()}` : `real-${Date.now()}`;
       onSessionCreated(sessionId, form.commitmentText, commitmentHashBytes, form);
     } catch (e: any) {
       setError(e?.message ?? 'Failed to create session');
@@ -155,236 +141,174 @@ export function CreateRoom({ mode, onSessionCreated }: CreateRoomProps) {
     !!commitmentHashBytes;
 
   return (
-    <div className="page animate-slide-up">
-      <div className="container">
-        <div style={{ maxWidth: 680, margin: '0 auto' }}>
-          {/* Page title */}
-          <div className="mb-3">
-            <h1 style={{ fontSize: '2rem' }}>
-              Create a{' '}
-              <span style={{ background: 'var(--grad-brand)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-                Converge Room
-              </span>
-            </h1>
-            <p className="mt-1" style={{ fontSize: '0.95rem' }}>
-              Participants join a live ephemeral room to co-sign a shared commitment.
-              Only the final proof settles to Solana.
-            </p>
+    <div className="page" style={{ padding: '60px 0' }}>
+      <div className="container" style={{ maxWidth: '780px' }}>
+        {/* Header */}
+        <div style={{ marginBottom: '40px' }}>
+          <div className="section-label">01 // INITIALIZE CHAMBER</div>
+          <h1 className="font-serif" style={{ fontSize: 'clamp(2.5rem, 5vw, 4rem)', lineHeight: 1.05 }}>
+            Create Ephemeral Co-Signature Session.
+          </h1>
+          <p style={{ marginTop: '14px', color: 'var(--text-secondary)', fontSize: '16px' }}>
+            Define agreement parameters, whitelist signing pubkeys, and specify quorum threshold.
+          </p>
+        </div>
+
+        {/* Form Panel */}
+        <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* Commitment Text */}
+          <div className="field">
+            <label className="field__label">01 / Agreement Text & Commitment</label>
+            <textarea
+              className="field__textarea font-mono"
+              placeholder="Enter agreement terms or commitment statement..."
+              value={form.commitmentText}
+              onChange={(e) => setForm((f) => ({ ...f, commitmentText: e.target.value }))}
+            />
+            {commitmentHash && (
+              <div style={{ marginTop: '10px', background: 'rgba(0,0,0,0.5)', padding: '10px 14px', borderRadius: '4px', border: '1px solid var(--border-subtle)', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-mono)' }}>
+                SHA-256 HASH: {commitmentHash}
+              </div>
+            )}
           </div>
 
-          {/* Mode notice */}
-          {mode === 'simulator' && (
-            <div className="alert alert--warning mb-2">
-              <Zap size={16} style={{ flexShrink: 0 }} />
-              <span>
-                <strong>Simulator Mode</strong> — ER state is in-memory. Switch to{' '}
-                <strong>Real ER</strong> for actual MagicBlock ER execution during judging.
-              </span>
-            </div>
-          )}
-
-          {/* Commitment text */}
-          <div className="card mb-2">
-            <div className="card__header flex-center gap-1">
-              <Hash size={16} style={{ color: 'var(--accent-teal)' }} />
-              <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>Commitment</span>
-            </div>
-            <div className="card__body">
-              <div className="form-group">
-                <label className="label" htmlFor="commitment-text">
-                  Agreement text
-                </label>
-                <textarea
-                  id="commitment-text"
-                  className="textarea"
-                  placeholder="e.g. Founders Agreement v1 — we agree to the terms outlined at..."
-                  rows={4}
-                  value={form.commitmentText}
-                  onChange={(e) => setForm((f) => ({ ...f, commitmentText: e.target.value }))}
-                />
-              </div>
-
-              {commitmentHash && (
-                <div className="commitment-hash mt-2">
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>SHA-256 HASH</span>
-                  <br />
-                  <code>{commitmentHash}</code>
-                </div>
-              )}
-
-              <div className="form-group mt-2">
-                <label className="label" htmlFor="context">
-                  Label (optional)
-                </label>
-                <input
-                  id="context"
-                  className="input"
-                  placeholder="e.g. Founders Agreement v1"
-                  maxLength={128}
-                  value={form.context}
-                  onChange={(e) => setForm((f) => ({ ...f, context: e.target.value }))}
-                />
-              </div>
-            </div>
+          {/* Context Label */}
+          <div className="field">
+            <label className="field__label">02 / Session Label (Optional)</label>
+            <input
+              type="text"
+              className="field__input font-mono"
+              placeholder="e.g. Founders Agreement v1"
+              value={form.context}
+              maxLength={128}
+              onChange={(e) => setForm((f) => ({ ...f, context: e.target.value }))}
+            />
           </div>
 
           {/* Participants */}
-          <div className="card mb-2">
-            <div className="card__header flex-between">
-              <div className="flex-center gap-1">
-                <Users size={16} style={{ color: 'var(--accent-purple)' }} />
-                <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>Participants</span>
-              </div>
-              <span className="badge badge-open">
+          <div className="field">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <label className="field__label">03 / Whitelisted Signer Pubkeys</label>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)' }}>
                 {form.participantAddresses.length} / {MAX_PARTICIPANTS}
               </span>
             </div>
-            <div className="card__body">
-              {/* Address input */}
-              <div className="form-group mb-2">
-                <label className="label">Add wallet address</label>
-                <div className="flex-center gap-1">
-                  <input
-                    id="participant-address-input"
-                    className="input input--mono"
-                    placeholder="Solana public key (base58)"
-                    value={newAddress}
-                    onChange={(e) => { setNewAddress(e.target.value); setAddressError(''); }}
-                    onKeyDown={(e) => e.key === 'Enter' && addAddress()}
-                  />
-                  <button
-                    id="add-participant-btn"
-                    className="btn btn-ghost btn-sm"
-                    style={{ flexShrink: 0 }}
-                    onClick={addAddress}
-                  >
-                    <Plus size={14} />
-                  </button>
-                </div>
-                {addressError && (
-                  <span style={{ fontSize: '0.8rem', color: '#f87171' }}>{addressError}</span>
-                )}
+
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '12px' }}>
+              <input
+                type="text"
+                className="field__input font-mono"
+                placeholder="Solana Public Key (Base58)"
+                value={newAddress}
+                onChange={(e) => { setNewAddress(e.target.value); setAddressError(''); }}
+                onKeyDown={(e) => e.key === 'Enter' && addAddress()}
+              />
+              <button type="button" className="btn btn--ghost" onClick={addAddress} style={{ flexShrink: 0 }}>
+                + Add Key
+              </button>
+            </div>
+
+            {addressError && (
+              <div style={{ color: 'var(--crimson)', fontFamily: 'var(--font-mono)', fontSize: '11px', marginBottom: '10px' }}>
+                {addressError}
               </div>
+            )}
 
-              {/* Quick-add self */}
-              {publicKey && !form.participantAddresses.includes(publicKey.toBase58()) && (
-                <button
-                  id="add-self-btn"
-                  className="btn btn-ghost btn-sm mb-2"
-                  onClick={addSelfAsParticipant}
-                >
-                  + Add my wallet
-                </button>
-              )}
+            {publicKey && !form.participantAddresses.includes(publicKey.toBase58()) && (
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={addSelfAsParticipant}
+                style={{ fontSize: '10px', padding: '6px 12px', marginBottom: '14px' }}
+              >
+                + Add Connected Wallet ({publicKey.toBase58().slice(0, 4)}...{publicKey.toBase58().slice(-4)})
+              </button>
+            )}
 
-              {/* Address list */}
-              {form.participantAddresses.length > 0 && (
-                <div className="flex-col gap-1">
-                  {form.participantAddresses.map((addr, i) => (
-                    <div key={addr} className="address-tag">
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', flexShrink: 0 }}>
-                        #{i + 1}
+            {/* Address List */}
+            {form.participantAddresses.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {form.participantAddresses.map((addr, idx) => (
+                  <div key={addr} className="signer-row">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)' }}>
+                        #{idx + 1}
                       </span>
-                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {addr}
-                      </span>
+                      <span className="signer-address">{addr}</span>
                       {publicKey?.toBase58() === addr && (
-                        <span className="badge badge-present" style={{ fontSize: '0.65rem', flexShrink: 0 }}>
-                          you
+                        <span className="badge-tag badge-tag--active" style={{ fontSize: '9px', padding: '2px 6px' }}>
+                          You
                         </span>
                       )}
-                      <button
-                        className="address-tag__remove"
-                        onClick={() => removeAddress(addr)}
-                        title="Remove"
-                      >
-                        ×
-                      </button>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <button
+                      type="button"
+                      onClick={() => removeAddress(addr)}
+                      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '14px' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-              {/* Quorum slider */}
-              {form.participantAddresses.length > 0 && (
-                <div className="form-group mt-3">
-                  <label className="label">
-                    Quorum — {form.quorum} of {form.participantAddresses.length} required
-                  </label>
+          {/* Quorum & Expiry Sliders */}
+          {form.participantAddresses.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+              <div className="field">
+                <label className="field__label">Quorum Requirement</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <input
-                    id="quorum-slider"
                     type="range"
                     min={1}
                     max={form.participantAddresses.length}
                     value={form.quorum}
                     onChange={(e) => setForm((f) => ({ ...f, quorum: Number(e.target.value) }))}
-                    style={{ width: '100%', accentColor: 'var(--accent-purple)', cursor: 'pointer' }}
+                    style={{ flex: 1, accentColor: 'var(--emerald)' }}
                   />
-                  <div className="flex-between" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    <span>1 signer</span>
-                    <span>{form.participantAddresses.length} / {form.participantAddresses.length}</span>
-                  </div>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--emerald)', fontWeight: 600 }}>
+                    {form.quorum} / {form.participantAddresses.length}
+                  </span>
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
 
-          {/* Expiry */}
-          <div className="card mb-3">
-            <div className="card__header flex-center gap-1">
-              <Clock size={16} style={{ color: 'var(--accent-amber)' }} />
-              <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>Session Expiry</span>
-            </div>
-            <div className="card__body">
-              <div className="form-group">
-                <label className="label">
-                  Duration — {form.expiryMinutes} minute{form.expiryMinutes !== 1 ? 's' : ''}
-                </label>
-                <input
-                  id="expiry-slider"
-                  type="range"
-                  min={1}
-                  max={60}
-                  value={form.expiryMinutes}
-                  onChange={(e) => setForm((f) => ({ ...f, expiryMinutes: Number(e.target.value) }))}
-                  style={{ width: '100%', accentColor: 'var(--accent-amber)', cursor: 'pointer' }}
-                />
-                <div className="flex-between" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  <span>1 min</span>
-                  <span>60 min</span>
+              <div className="field">
+                <label className="field__label">Chamber Expiry (Minutes)</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <input
+                    type="range"
+                    min={1}
+                    max={60}
+                    value={form.expiryMinutes}
+                    onChange={(e) => setForm((f) => ({ ...f, expiryMinutes: Number(e.target.value) }))}
+                    style={{ flex: 1, accentColor: 'var(--emerald)' }}
+                  />
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px', color: 'var(--text-primary)' }}>
+                    {form.expiryMinutes}m
+                  </span>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* Error */}
           {error && (
-            <div className="alert alert--error mb-2">
-              <span>{error}</span>
+            <div style={{ padding: '12px', background: 'rgba(244,63,94,0.1)', border: '1px solid var(--crimson)', color: 'var(--crimson)', fontFamily: 'var(--font-mono)', fontSize: '12px', borderRadius: '4px' }}>
+              {error}
             </div>
           )}
 
-          {/* CTA */}
+          {/* Submit */}
           <button
-            id="create-room-btn"
-            className="btn btn-primary w-full"
-            style={{ fontSize: '1.05rem', padding: '1rem', borderRadius: 'var(--r-lg)' }}
-            onClick={handleCreate}
+            type="button"
+            className="btn btn--emerald"
+            style={{ width: '100%', padding: '16px', fontSize: '12px', marginTop: '10px' }}
             disabled={!canCreate || isCreating}
+            onClick={handleCreate}
           >
-            {isCreating ? (
-              <>
-                <span className="spinner" style={{ width: 16, height: 16 }} />
-                Creating Ephemeral Room...
-              </>
-            ) : (
-              <>✦ Open Converge Room</>
-            )}
+            {isCreating ? 'Delegating PDA to MagicBlock...' : '✦ Initialize Ephemeral Chamber'}
           </button>
-
-          <p className="text-center mt-2 text-muted text-sm">
-            Session is delegated to MagicBlock Ephemeral Rollup immediately after creation.
-          </p>
         </div>
       </div>
     </div>
