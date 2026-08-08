@@ -1,12 +1,17 @@
 # Converge
 
-## Ephemeral Live Co-Signature Rooms on Solana
+## Ephemeral Coordination Rooms on Solana
 
 > **"The room was ephemeral. The proof is permanent."**
 
-Converge is a live, synchronous coordination room built on **Solana** using **MagicBlock Ephemeral Rollups**. Multiple wallets join a shared session, sign a commitment in real-time, and only the final canonical proof settles to the Solana base layer.
+Converge is an **ephemeral coordination layer for Solana**. It turns multi-party workflows into temporary live rooms: participants join, coordinate, and act on shared state in real time, while only the meaningful final outcome becomes durable on Solana.
 
-Built for the [MagicBlock Blitz Hackathon](https://magicblock.gg).
+For the **MagicBlock Blitz Hackathon**, Converge demonstrates this primitive through **synchronous co-signing**: multiple wallets enter the same session, sign a shared commitment, reach quorum, and produce a canonical onchain proof.
+
+Built with **Solana** and **MagicBlock Ephemeral Rollups**.
+
+**Program (Devnet):** `DYRQJTnz2ehCexSjqiKFVt5jfJSNXN1e915AMboHHQz5`
+**Explorer:** https://explorer.solana.com/address/DYRQJTnz2ehCexSjqiKFVt5jfJSNXN1e915AMboHHQz5?cluster=devnet
 
 ---
 
@@ -105,20 +110,21 @@ Solana: ConvergeCommitRecord written
 ### Prerequisites
 
 - Node.js ≥ 18
-- [Anchor CLI](https://www.anchor-lang.com/docs/installation) ≥ 0.32
-- [Solana CLI](https://docs.solana.com/cli/install-solana-cli-tools)
 - A Phantom / Solflare / Backpack wallet
 
-### 1. Deploy Anchor Program (run on Google Cloud Shell / powerful machine)
+### 1. Anchor Program
 
-```bash
-cd anchor
-anchor build
-anchor deploy --provider.cluster devnet
-# Copy the program ID and update Anchor.toml + src/services/solana.ts
+The program is deployed to Solana Devnet at:
+
+```
+DYRQJTnz2ehCexSjqiKFVt5jfJSNXN1e915AMboHHQz5
 ```
 
-### 2. Install & run frontend
+The full MagicBlock ER integration (`ephemeral-rollups-sdk`, `#[delegate]`, `#[commit]`) is implemented in `anchor/programs/converge/src/lib.rs`.
+
+> **Note on local builds:** `anchor build` currently hits a known dependency conflict on crates.io between `anchor-lang 0.32.1` and the recently published `solana-loader-v3-interface v3.0.0`. This is an upstream ecosystem issue affecting any machine resolving fresh dependencies from the registry. The program was deployed to devnet via Solana Playground. The ER SDK integration remains in the repository source.
+
+### 2. Run the Frontend
 
 ```bash
 cd app
@@ -126,7 +132,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`
+Open the local Vite URL displayed by the development server.
 
 ---
 
