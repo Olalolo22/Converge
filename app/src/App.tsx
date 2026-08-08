@@ -27,6 +27,26 @@ import { hashToHex, ER_RPC } from './services/solana';
 import { createSimulator, ErSimulator } from './services/simulator';
 
 // ─────────────────────────────────────────────
+// Solana provider bridge — MUST be module-level.
+// Defining this inside App() creates a new component
+// type on every render, which unmounts children and
+// produces a blank screen.
+// ─────────────────────────────────────────────
+const CP  = ConnectionProvider  as React.ComponentType<{ endpoint: string; children: React.ReactNode }>;
+const WP  = WalletProvider      as React.ComponentType<{ wallets: any[]; autoConnect: boolean; children: React.ReactNode }>;
+const WMP = WalletModalProvider as React.ComponentType<{ children: React.ReactNode }>;
+
+function SolanaProviders({ children, wallets }: { children: React.ReactNode; wallets: any[] }) {
+  return (
+    <CP endpoint={ER_RPC}>
+      <WP wallets={wallets} autoConnect>
+        <WMP>{children}</WMP>
+      </WP>
+    </CP>
+  );
+}
+
+// ─────────────────────────────────────────────
 // App state
 // ─────────────────────────────────────────────
 interface SessionCtx {
@@ -176,23 +196,8 @@ function App() {
     }
   }
 
-  // Bridge wrapper — needed because @solana/wallet-adapter-react providers return
-  // ReactNode | Promise<ReactNode> which TypeScript 5.5+ rejects in strict JSX.
-  const SolanaProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const CP = ConnectionProvider as React.ComponentType<{ endpoint: string; children: React.ReactNode }>;
-    const WP = WalletProvider as React.ComponentType<{ wallets: typeof wallets; autoConnect: boolean; children: React.ReactNode }>;
-    const WMP = WalletModalProvider as React.ComponentType<{ children: React.ReactNode }>;
-    return (
-      <CP endpoint={ER_RPC}>
-        <WP wallets={wallets} autoConnect>
-          <WMP>{children}</WMP>
-        </WP>
-      </CP>
-    );
-  };
-
   return (
-    <SolanaProviders>
+    <SolanaProviders wallets={wallets}>
       <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
         <Header
           mode={mode}
