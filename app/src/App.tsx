@@ -176,23 +176,34 @@ function App() {
     }
   }
 
+  // Bridge wrapper — needed because @solana/wallet-adapter-react providers return
+  // ReactNode | Promise<ReactNode> which TypeScript 5.5+ rejects in strict JSX.
+  const SolanaProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const CP = ConnectionProvider as React.ComponentType<{ endpoint: string; children: React.ReactNode }>;
+    const WP = WalletProvider as React.ComponentType<{ wallets: typeof wallets; autoConnect: boolean; children: React.ReactNode }>;
+    const WMP = WalletModalProvider as React.ComponentType<{ children: React.ReactNode }>;
+    return (
+      <CP endpoint={ER_RPC}>
+        <WP wallets={wallets} autoConnect>
+          <WMP>{children}</WMP>
+        </WP>
+      </CP>
+    );
+  };
+
   return (
-    <ConnectionProvider endpoint={ER_RPC}>
-      <WalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>
-          <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-            <Header
-              mode={mode}
-              onModeChange={handleModeChange}
-              onLogoClick={handleGoHome}
-            />
-            <main style={{ flex: 1 }}>
-              {renderContent()}
-            </main>
-          </div>
-        </WalletModalProvider>
-      </WalletProvider>
-    </ConnectionProvider>
+    <SolanaProviders>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <Header
+          mode={mode}
+          onModeChange={handleModeChange}
+          onLogoClick={handleGoHome}
+        />
+        <main style={{ flex: 1 }}>
+          {renderContent()}
+        </main>
+      </div>
+    </SolanaProviders>
   );
 }
 

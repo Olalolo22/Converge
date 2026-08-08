@@ -80,7 +80,10 @@ export function getRecordPda(session: PublicKey): [PublicKey, number] {
 // ─────────────────────────────────────────────
 export async function computeCommitmentHash(text: string): Promise<Uint8Array> {
   const encoder = new TextEncoder();
-  const data = encoder.encode(text);
+  const encoded = encoder.encode(text);
+  // Cast required: TextEncoder returns Uint8Array<ArrayBufferLike> in TS 5.5+
+  // but crypto.subtle.digest expects Uint8Array<ArrayBuffer>.
+  const data = new Uint8Array(encoded.buffer.slice(0)) as Uint8Array<ArrayBuffer>;
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   return new Uint8Array(hashBuffer);
 }

@@ -205,9 +205,10 @@ export class ErSimulator {
 
     // Generate a deterministic ER session hash (in real ER, this is a hash of session state)
     const encoder = new TextEncoder();
-    const summaryBytes = encoder.encode(
+    const encoded = encoder.encode(
       JSON.stringify({ id: this.state.sessionId, signedPubkeys, ts: Date.now() })
     );
+    const summaryBytes = new Uint8Array(encoded.buffer.slice(0)) as Uint8Array<ArrayBuffer>;
     const hashBuffer = await crypto.subtle.digest('SHA-256', summaryBytes);
     const erSessionHash = new Uint8Array(hashBuffer);
 
