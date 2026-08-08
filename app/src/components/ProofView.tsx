@@ -47,7 +47,7 @@ export function ProofView({ record, commitmentText, context, onNewRoom }: ProofV
       commitmentHash: record.commitmentHash,
       erSessionHash: record.erSessionHash,
       quorum: record.quorum,
-      signedCount: record.signedPubkeys.len ?? record.signedPubkeys.length,
+      signedCount: record.signedPubkeys.length,
       signedPubkeys: record.signedPubkeys,
       committedAt: record.committedAt,
       timestampISO: new Date(record.committedAt * 1000).toISOString(),
