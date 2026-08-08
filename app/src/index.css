@@ -416,3 +416,178 @@ h1, h2, h3, h4 { font-weight: 300; line-height: 1.05; color: var(--text-primary)
   50% { opacity: 0.4; transform: scale(0.85); }
   100% { opacity: 1; transform: scale(1); }
 }
+
+/* ─── Mobile Responsive ──────────────────────────────────────────── */
+
+/* Tablet & below */
+@media (max-width: 900px) {
+  .container {
+    padding: 0 1.25rem;
+  }
+
+  /* Grid layouts → single column */
+  .grid-problem {
+    grid-template-columns: 1fr;
+    gap: 48px;
+  }
+
+  .grid-comparative {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .step-row {
+    grid-template-columns: 48px 1fr;
+    grid-template-rows: auto auto;
+    gap: 16px;
+  }
+
+  /* Step row: description spans both columns on third row */
+  .step-row > *:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+
+  .editorial-section {
+    padding: 80px 0;
+  }
+}
+
+/* Mobile */
+@media (max-width: 640px) {
+  .container {
+    padding: 0 1rem;
+  }
+
+  /* ── Header ── */
+  .header {
+    height: auto;
+    padding: 12px 0;
+  }
+
+  .header__inner {
+    padding: 0 1rem;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .header__brand-name {
+    font-size: 1.15rem;
+  }
+
+  /* Hide "MagicBlock ER" label on small screens */
+  .header__brand span:last-child {
+    display: none;
+  }
+
+  /* Stack mode switch + wallet button */
+  .header__inner > div:last-child {
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .mode-switch__btn {
+    font-size: 10px;
+    padding: 5px 10px;
+  }
+
+  /* Wallet adapter button size */
+  .wallet-adapter-button {
+    font-size: 11px !important;
+    padding: 8px 14px !important;
+    height: auto !important;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    padding: 100px 1rem 48px;
+    min-height: 90vh;
+  }
+
+  .hero__title {
+    font-size: clamp(2.4rem, 11vw, 4rem);
+    margin-bottom: 1.25rem;
+  }
+
+  .hero__subtitle {
+    font-size: 15px;
+    max-width: 100%;
+  }
+
+  .hero__footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 24px;
+    padding-top: 28px;
+  }
+
+  /* ── Stats band ── */
+  .stats-band {
+    padding: 40px 0;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+  }
+
+  /* ── Editorial sections ── */
+  .editorial-section {
+    padding: 60px 0;
+  }
+
+  .grid-problem {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+
+  .grid-comparative {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-old,
+  .panel-new {
+    padding: 24px;
+    gap: 14px;
+  }
+
+  /* ── Step row ── */
+  .step-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 24px 0;
+  }
+
+  /* ── Buttons ── */
+  .btn {
+    padding: 12px 20px;
+    font-size: 10px;
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* ── Forms (CreateRoom) ── */
+  input, textarea, select {
+    font-size: 16px !important; /* prevent iOS zoom on focus */
+  }
+}
+
+/* Very small screens */
+@media (max-width: 380px) {
+  .hero__title {
+    font-size: 2.2rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mode-switch {
+    flex-direction: row;
+    width: 100%;
+  }
+
+  .mode-switch__btn {
+    flex: 1;
+    text-align: center;
+  }
+}
