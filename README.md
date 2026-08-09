@@ -1,217 +1,857 @@
-# Converge
+Converge
 
-## Ephemeral Coordination Rooms on Solana
+Ephemeral Coordination Rooms on Solana
 
-> **"The room was ephemeral. The proof is permanent."**
+“The room was ephemeral. The proof is permanent.”
 
-Converge is an **ephemeral coordination layer for Solana**. It turns multi-party workflows into temporary live rooms: participants join, coordinate, and act on shared state in real time, while only the meaningful final outcome becomes durable on Solana.
+Converge is an ephemeral coordination layer for Solana.
 
-For the **MagicBlock Blitz Hackathon**, Converge demonstrates this primitive through **synchronous co-signing**: multiple wallets enter the same session, sign a shared commitment, reach quorum, and produce a canonical onchain proof.
+It turns multi-party workflows into temporary live rooms: participants join, coordinate, and act on shared state in real time, while only the meaningful final outcome becomes durable on Solana.
 
-Built with **Solana** and **MagicBlock Ephemeral Rollups**.
+For the MagicBlock Blitz Hackathon, Converge demonstrates this primitive through synchronous co-signing: multiple wallets enter the same session, sign a shared commitment, reach quorum, and produce a canonical onchain proof.
 
-**Program (Devnet):** `DYRQJTnz2ehCexSjqiKFVt5jfJSNXN1e915AMboHHQz5`
+Built with Solana and MagicBlock Ephemeral Rollups.
+
+*Program (Devnet):** `DYRQJTnz2ehCexSjqiKFVt5jfJSNXN1e915AMboHHQz5`
 **Explorer:** https://explorer.solana.com/address/DYRQJTnz2ehCexSjqiKFVt5jfJSNXN1e915AMboHHQz5?cluster=devnet
 
 ---
+A caveat: The demo submitted  is currently running against our simulator. We hit an upstream solana-loader-v3-interface dependency breakage that blocked the Ephemeral Rollups SDK build in our environment right before submission. So we separated the demo state machine from the integration layer rather than ship a broken demo. The repository contains the full Anchor integration with the ER delegation and commit macros, and the simulator reproduces the exact ephemeral state flow we’re targeting
 
-## The MagicBlock Story
+⸻
 
-Converge is a concrete demonstration of what Ephemeral Rollups enable:
+The Idea
 
-```
+Most onchain coordination is asynchronous.
+
+A participant acts. Another participant responds. Another signs. Intermediate state accumulates on the base layer even though much of that state only matters for the few minutes during which the coordination is happening.
+
+Converge treats that coordination as a temporary execution session.
+
+             CREATE
+                │
+                ▼
+       ┌─────────────────┐
+       │  LIVE ROOM      │
+       │                 │
+       │  Join           │
+       │  Presence       │
+       │  Heartbeats     │
+       │  Actions        │
+       │  Quorum         │
+       └────────┬────────┘
+                │
+          session ends
+                │
+                ▼
+       ┌─────────────────┐
+       │ FINAL OUTCOME   │
+       │                 │
+       │ Commitment      │
+       │ Signers         │
+       │ Quorum          │
+       │ Timestamp       │
+       └────────┬────────┘
+                │
+                ▼
+             SOLANA
+
+The live coordination is temporary.
+
+The result is permanent.
+
+⸻
+
+The MagicBlock Story
+
+Converge is built around the execution model enabled by MagicBlock Ephemeral Rollups.
+
+The live room contains state that can change frequently:
+
 ┌─────────────────────────────────────────────────────┐
-│          MagicBlock Ephemeral Rollup (ER)           │
+│          MAGICBLOCK EPHEMERAL ROLLUP                │
 │                                                     │
-│  → Participant presence    (sub-10ms, no L1 write)  │
-│  → Heartbeat / keep-alive  (sub-10ms, no L1 write)  │
-│  → Signing progress        (sub-10ms, no L1 write)  │
-│  → Quorum detection        (pure ER computation)    │
-│  → Session lifecycle                                │
+│  Participant presence                               │
+│  Heartbeats / keep-alive                            │
+│  Signing progress                                   │
+│  Quorum detection                                   │
+│  Session lifecycle                                  │
 │                                                     │
-│  Only when quorum is reached:                       │
-│         ↓ commit_session                            │
-└─────────────────────────────────────────────────────┘
-                          │
-                          ▼
+│             Temporary coordination                  │
+│                       │                             │
+│                       ▼                             │
+│                FINAL OUTCOME                        │
+└───────────────────────┬─────────────────────────────┘
+                        │
+                        │ settlement
+                        ▼
 ┌─────────────────────────────────────────────────────┐
-│                 Solana Base Layer                   │
+│                   SOLANA                            │
 │                                                     │
-│  CoSignSession   — session configuration & status   │
-│  ConvergeCommitRecord — immutable co-signature proof │
-│                                                     │
-│  commitment_hash, signed wallets, quorum, timestamp │
+│  Session configuration                              │
+│  Final co-signature proof                           │
+│  Commitment hash                                    │
+│  Signed wallets                                     │
+│  Quorum                                             │
+│  Settlement timestamp                               │
 └─────────────────────────────────────────────────────┘
-```
 
-**High-frequency coordination is ephemeral. Only the meaningful final agreement settles onchain.**
+The architectural principle is:
 
-This is the primary reason Converge exists — and why it could not be built the same way without Ephemeral Rollups.
+High-frequency coordination is ephemeral. Only the meaningful outcome needs to become durable.
 
----
+This gives Converge a clean separation between live coordination state and permanent settlement state.
 
-## Demo Flow
+⸻
 
-```
+Why an Ephemeral Rollup?
+
+A conventional Solana workflow can record every interaction directly onchain.
+
+But a live coordination room does not necessarily need every intermediate state to become permanent.
+
+Consider a session with:
+
+* 3 participants
+* repeated heartbeats
+* joins and leaves
+* multiple state transitions
+* signing progress
+* quorum detection
+* a final settlement
+
+Most of that activity is useful while the room is alive.
+
+Once the session reaches a terminal state, what matters is the result.
+
+Converge therefore separates the two:
+
+LIVE SESSION
+    │
+    ├── presence
+    ├── heartbeats
+    ├── signing
+    ├── quorum
+    └── lifecycle
+          │
+          ▼
+      SETTLEMENT
+          │
+          ▼
+SOLANA BASE LAYER
+    │
+    └── canonical proof
+
+⸻
+
+Demo Flow
+
+The Blitz demonstration uses co-signing as the first application of the coordination-room primitive.
+
 CREATE ROOM
+     ↓
+Define commitment
+Define participants
+Define quorum
+Define expiry
+     ↓
+OPEN CONVERGE ROOM
+     ↓
+Participants join
+     ↓
+LIVE PRESENCE
+     ↓
+Participants sign
+     ↓
+QUORUM REACHED
+     ↓
+FINAL SETTLEMENT
+     ↓
+CO-SIGNATURE PROOF
+     ↓
+SOLANA
+
+The user sees
+
+1. A commitment to sign
+2. The participants required
+3. A live countdown
+4. Participant presence
+5. Signing progress
+6. Quorum progress
+7. Final settlement
+8. The resulting proof
+
+The point is not simply that wallets can sign.
+
+The point is that the signing process itself is treated as a temporary coordination session.
+
+⸻
+
+Architecture
+
+Solana Program
+
+The onchain program is implemented with Anchor.
+
+The main lifecycle is:
+
+Instruction	Execution	Purpose
+create_session	Solana base	Initialize the ConvergeSession
+delegate_session	Solana base	Delegate the session account to the ER
+join_session	ER	Track participant presence
+heartbeat	ER	Refresh participant presence
+sign_session	ER	Record a participant’s signature state
+commit_session	ER → Solana	Settle the final state
+expire_session	Solana base	Mark an expired session
+
+The exact execution path depends on the MagicBlock environment and delegation state.
+
+⸻
+
+Live Session State
+
+The ephemeral session is responsible for coordination state such as:
+
+Participant
+    ├── present
+    ├── signed
+    └── last heartbeat
+Session
+    ├── commitment
+    ├── quorum
+    ├── expiry
+    ├── participants
+    └── lifecycle status
+
+This state exists to coordinate the room while it is active.
+
+⸻
+
+Onchain Accounts
+
+ConvergeSession
+
+The session account contains the configuration required to establish the coordination room.
+
+Conceptually:
+
+ConvergeSession {
+    creator,
+    participant_pubkeys,
+    commitment_hash,
+    quorum,
+    expiry_ts,
+    status,
+    ...
+}
+
+It defines:
+
+* who is allowed to participate
+* what commitment is being coordinated
+* how many signatures are required
+* when the session expires
+* the current terminal state
+
+⸻
+
+ConvergeCommitRecord
+
+When the session successfully reaches quorum, the meaningful result becomes a durable proof.
+
+The record contains information such as:
+
+ConvergeCommitRecord {
+    session,
+    commitment_hash,
+    signed_pubkeys,
+    quorum,
+    committed_at,
+    er_session_hash,
+}
+
+This gives other clients and programs a compact representation of the final outcome without requiring them to replay the entire live coordination session.
+
+⸻
+
+Key Invariant
+
+The architectural goal is simple:
+
+Intermediate coordination should not need to become permanent blockchain history.
+
+Joining, heartbeating, and signing are session-level actions.
+
+The final commitment is the durable outcome.
+
+Conceptually:
+
+JOIN
+  │
+  ├── temporary
+  │
+HEARTBEAT
+  │
+  ├── temporary
+  │
+SIGN
+  │
+  ├── temporary
+  │
+QUORUM
+  │
+  └── settlement
+          │
+          ▼
+       SOLANA
+
+⸻
+
+Settlement
+
+When the required quorum is reached, the session can transition into its final settlement path.
+
+The final result contains:
+
+* session identifier
+* commitment hash
+* wallets that signed
+* required quorum
+* settlement timestamp
+* ER session state hash where applicable
+
+The result is represented by ConvergeCommitRecord.
+
+The live room can then disappear without losing the fact that the final agreement occurred.
+
+The room was ephemeral. The proof is permanent.
+
+⸻
+
+Expiry
+
+A coordination room does not have to succeed.
+
+Every session has an expiry.
+
+If quorum is not reached before the deadline:
+
+SESSION
+   │
+   ├── quorum reached
+   │       ↓
+   │    COMMITTED
+   │
+   └── deadline reached
+           ↓
+        EXPIRED
+
+An expired session does not produce a valid ConvergeCommitRecord.
+
+This gives the room a clear atomic lifecycle:
+
+             ┌──────────────┐
+             │     OPEN     │
+             └──────┬───────┘
+                    / \
+                   /   \
+          quorum  /     \ expiry
+                 /       \
+                ▼         ▼
+        ┌────────────┐  ┌──────────┐
+        │ COMMITTED  │  │ EXPIRED │
+        └────────────┘  └──────────┘
+
+⸻
+
+Composability
+
+Converge is designed as a reusable coordination primitive rather than only a standalone signing application.
+
+Once a session produces a final proof, another Solana program can use that proof as a precondition for its own logic.
+
+Conceptually:
+
+let record =
+    ConvergeCommitRecord::from_account(&commit_record_info)?;
+require!(
+    record.commitment_hash == expected_hash,
+    YourError::WrongCommitment
+);
+require!(
+    record.signed_pubkeys.contains(&required_signer),
+    YourError::MissingSignature
+);
+
+This creates a simple pattern:
+
+APPLICATION
+     │
+     ▼
+CONVERGE ROOM
+     │
+     ├── coordinate
+     ├── verify
+     └── reach outcome
+           │
+           ▼
+    COMMIT RECORD
+           │
+           ▼
+APPLICATION CONTINUES
+
+Potential applications include:
+
+* Governance approvals
+* Auction finalization
+* Multi-party transaction authorization
+* Agent coordination
+* Attendance verification
+* Collaborative workflows
+* Other synchronous Solana workflows
+
+Co-signing is simply the first concrete demonstration.
+
+⸻
+
+Frontend
+
+The frontend is built with:
+
+* React
+* Vite
+* Solana Wallet Adapter
+* Vanilla CSS
+
+The application has two conceptual connections:
+
+Frontend
+   │
+   ├──────────────► Solana Base Layer
+   │
+   └──────────────► MagicBlock ER Router
+
+The UI is designed around the idea of a live room, rather than a conventional blockchain transaction form.
+
+⸻
+
+User Flow
+
+1. Create a Room
+
+The creator:
+
+1. Connects a wallet
+2. Enters the commitment text
+3. Adds participant wallet addresses
+4. Selects the quorum
+5. Sets an expiry
+6. Opens the Converge room
+
+The commitment is hashed before being used as the canonical session commitment.
+
+⸻
+
+2. Join
+
+Participants connect their wallets and join the room.
+
+The room identifies whether each required participant is currently present.
+
+PARTICIPANTS
+● 0xAB...91   PRESENT
+○ 0x7C...42   WAITING
+○ 0xD4...88   WAITING
+
+⸻
+
+3. Stay Present
+
+Participants maintain an active session through heartbeat updates.
+
+This lets the room distinguish between:
+
+PRESENT
+
+and
+
+NO LONGER PRESENT
+
+without requiring every heartbeat to become permanent application history.
+
+⸻
+
+4. Sign
+
+A participant can sign the commitment while present in the room.
+
+The room updates its signing state:
+
+SIGNING PROGRESS
+████████░░░░░░░░
+2 / 3 SIGNED
+
+⸻
+
+5. Reach Quorum
+
+Once the required number of participants has signed:
+
+QUORUM REACHED
+3 / 3 SIGNED
+
+The session enters its settlement path.
+
+⸻
+
+6. Proof
+
+The final proof displays:
+
+* Commitment hash
+* Signers
+* Quorum
+* Settlement timestamp
+* Session information
+* Solana transaction/proof information where available
+
+The user no longer needs the entire live session to verify the result.
+
+⸻
+
+Simulator Mode
+
+Converge also includes a deterministic simulator for local development, offline demonstrations, and environments where the live dependency stack is unavailable.
+
+The simulator mirrors the coordination state machine:
+
+OPEN
+ ↓
+JOIN
+ ↓
+PRESENCE
+ ↓
+SIGN
+ ↓
+QUORUM
+ ↓
+COMMIT
+
+It does not require a network connection and is useful for validating the product flow independently from infrastructure availability.
+
+The simulator should be understood as a demo and development resilience layer, not as the underlying architectural model.
+
+The intended production execution model remains:
+
+Solana
    ↓
-Solana: init CoSignSession PDA
-Solana: delegate PDA to MagicBlock ER
+Delegation
    ↓
-WALLETS JOIN (ER-only — no Solana tx)
+MagicBlock Ephemeral Rollup
    ↓
-LIVE PRESENCE visible in real-time
+Live coordination
    ↓
-PARTICIPANTS SIGN (ER-only — no Solana tx)
+Settlement
    ↓
-QUORUM REACHED → ER commits to Solana
-   ↓
-Solana: ConvergeCommitRecord written
-   ↓
-✓ CO-SIGNATURE COMMITTED — Proof on Solana
-```
+Solana
 
----
+⸻
 
-## Architecture
+Demo Environment
 
-### Anchor Program (`anchor/programs/converge/`)
+The repository contains the MagicBlock ER integration alongside the deterministic simulator.
 
-| Instruction | Sent To | Purpose |
-|---|---|---|
-| `create_session` | Solana base | Init `ConvergeSession` PDA |
-| `delegate_session` | Solana base | Hand PDA to MagicBlock ER |
-| `join_session` | **ER RPC** | Track participant presence |
-| `heartbeat` | **ER RPC** | Refresh last-seen timestamp |
-| `sign_session` | **ER RPC** | Mark participant as signed |
-| `commit_session` | **ER RPC** | Flush final state → Solana, write `ConvergeCommitRecord` |
-| `expire_session` | Solana base | Mark session Expired post-deadline |
+The simulator exists because blockchain infrastructure and dependency stacks can fail independently of application logic. Keeping the coordination state machine separable allows the complete user experience to remain demonstrable while the ER integration is developed and tested.
 
-### Key invariant
+For the hackathon, the important architectural boundary remains:
 
-> Joining, heartbeating, and signing never produce a Solana transaction. The Solana account is read-only (owned by the delegation program) for the entire live session. Only the final `commit_session` via `MagicIntentBundleBuilder` writes to the base layer.
+EPHEMERAL
+Presence
+Heartbeats
+Intermediate actions
+Signing state
+Quorum computation
+             ↓
+PERMANENT
+Final commitment
+Signed participants
+Settlement timestamp
+Proof
 
-### Onchain accounts
+⸻
 
-**`ConvergeSession`** — session config (creator, participants, commitment hash, quorum, expiry, status)
+Why Converge?
 
-**`ConvergeCommitRecord`** — immutable proof (signed wallets, quorum, committed timestamp, ER session hash)
+Converge is not trying to make signatures themselves novel.
 
-### Frontend (`app/`)
+The interesting primitive is the temporary coordination environment around them.
 
-- **React + Vite** — fast dev, single-page app
-- **Dual connection** — base layer (`api.devnet.solana.com`) + ER router (`devnet-router.magicblock.app`)
-- **Simulator mode** — exact ER state machine for offline demos (fallback only; Real ER is the primary judging path)
+Traditional multisig-style workflows are generally concerned with whether required parties have approved something.
 
----
+Converge focuses on how those parties coordinate while the decision is happening:
 
-## Quick Start
+Traditional workflow
+Person A signs
+      ↓
+wait
+      ↓
+Person B signs
+      ↓
+wait
+      ↓
+Person C signs
+      ↓
+final state
+Converge
+      ┌──────────────────────────┐
+      │     LIVE ROOM            │
+      │                          │
+      │ A ──────┐               │
+      │ B ──────┼── coordinate  │
+      │ C ──────┘               │
+      │                          │
+      │ presence + actions      │
+      │ quorum + lifecycle      │
+      └────────────┬─────────────┘
+                   │
+                   ▼
+              FINAL PROOF
 
-### Prerequisites
+The room gives the workflow a temporary shared execution context.
 
-- Node.js ≥ 18
-- A Phantom / Solflare / Backpack wallet
+⸻
 
-### 1. Anchor Program
+What Converge Demonstrates
 
-The program is deployed to Solana Devnet at:
+Converge demonstrates a broader pattern for Solana applications:
 
-```
-DYRQJTnz2ehCexSjqiKFVt5jfJSNXN1e915AMboHHQz5
-```
+1. Create a temporary session
 
-The full MagicBlock ER integration (`ephemeral-rollups-sdk`, `#[delegate]`, `#[commit]`) is implemented in `anchor/programs/converge/src/lib.rs`.
+Define participants, rules, and an intended outcome.
 
-> **Note on local builds:** `anchor build` currently hits a known dependency conflict on crates.io between `anchor-lang 0.32.1` and the recently published `solana-loader-v3-interface v3.0.0`. This is an upstream ecosystem issue affecting any machine resolving fresh dependencies from the registry. The program was deployed to devnet via Solana Playground. The ER SDK integration remains in the repository source.
+2. Move live coordination into the session
 
-### 2. Run the Frontend
+Participants interact with shared state while the session is active.
 
-```bash
+3. Keep intermediate state ephemeral
+
+Not every heartbeat or interaction needs to become permanent history.
+
+4. Detect a meaningful terminal outcome
+
+The session reaches quorum or expires.
+
+5. Settle only what matters
+
+The final result becomes a durable Solana record.
+
+In one sentence:
+
+Converge turns Ephemeral Rollups into live coordination rooms for Solana.
+
+⸻
+
+Tech Stack
+
+Layer	Technology
+Blockchain	Solana Devnet
+Ephemeral execution	MagicBlock Ephemeral Rollups
+Smart Contract	Anchor 0.32
+ER SDK	ephemeral-rollups-sdk
+Frontend	React 18 + Vite
+Wallet	@solana/wallet-adapter
+Styling	Vanilla CSS
+Language	Rust + TypeScript
+
+⸻
+
+Project Structure
+
+converge/
+│
+├── anchor/
+│   ├── programs/
+│   │   └── converge/
+│   │       └── src/
+│   │           └── lib.rs
+│   │
+│   ├── Anchor.toml
+│   └── Cargo.toml
+│
+└── app/
+    ├── src/
+    │   ├── components/
+    │   ├── services/
+    │   ├── hooks/
+    │   └── ...
+    │
+    ├── package.json
+    └── vite.config.ts
+
+⸻
+
+Quick Start
+
+Prerequisites
+
+* Node.js ≥ 18
+* Anchor CLI ≥ 0.32
+* Solana CLI
+* A Solana wallet such as Phantom, Solflare, or Backpack
+
+⸻
+
+1. Build the Anchor Program
+
+cd anchor
+anchor build
+
+Deploy to Solana Devnet:
+
+anchor deploy --provider.cluster devnet
+
+Update the resulting program ID in the relevant configuration files.
+
+⸻
+
+2. Run the Frontend
+
 cd app
 npm install
 npm run dev
-```
 
 Open the local Vite URL displayed by the development server.
 
----
+⸻
 
-## Usage
+Usage
 
-### Create a Room
+Create a Room
 
 1. Connect your wallet
-2. Enter the commitment text (will be SHA-256 hashed)
-3. Add participant wallet addresses (max 5)
-4. Set quorum and expiry duration
-5. Click **Open Converge Room**
+2. Enter the commitment
+3. Add participant wallets
+4. Select the quorum
+5. Set an expiry
+6. Open the Converge room
 
-### Live Room
+⸻
 
-- Participants join using their wallet
-- Each participant's `PRESENT` status appears in real-time (ER state)
-- Participants click **Sign Commitment** — no Solana tx per sign
-- Counter updates live: `1/3 → 2/3 → 3/3 SIGNED`
+Coordinate
 
-### Settlement
+Participants enter the room and become visible as present.
 
-- When quorum is reached, `commit_session` is sent via MagicBlock SDK
-- ER flushes state to Solana base layer
-- `ConvergeCommitRecord` PDA is created with the immutable proof
-- UI shows commitment hash, signers, and Solana Explorer link
+The live interface tracks:
 
-### Expiry
+* Presence
+* Heartbeats
+* Signing state
+* Quorum
+* Remaining session time
 
-- If session expires before quorum: status transitions to `EXPIRED`
-- No `ConvergeCommitRecord` is written
-- No valid co-signature proof exists
+⸻
 
----
+Sign
 
-## Simulator Mode
+Each participant signs the shared commitment while participating in the session.
 
-For offline demos and single-operator testing, switch to **Simulator Mode** in the header. This runs an exact in-memory mirror of the ER state machine — same logic, same state transitions, no network required.
+Signing progress updates in the live room.
 
-> **Note:** Real ER mode (primary judging path) uses actual MagicBlock endpoints. The simulator is a fallback only.
+⸻
 
----
+Settle
 
-## Tech Stack
+Once quorum is reached, the session enters the final settlement path.
 
-| Layer | Technology |
-|---|---|
-| Blockchain | Solana Devnet |
-| Ephemeral Rollups | MagicBlock ER (`devnet-router.magicblock.app`) |
-| Smart Contract | Anchor 0.32 + `ephemeral-rollups-sdk` |
-| Frontend | React 18 + Vite |
-| Wallet | `@solana/wallet-adapter` |
-| Styling | Vanilla CSS (dark glassmorphic) |
+The resulting proof records the meaningful outcome of the coordination session.
 
----
+⸻
 
-## Composability
+Current Demonstration
 
-Other Solana programs can use `ConvergeCommitRecord` as a precondition for their own logic:
+The Blitz demonstration focuses on one simple workflow:
 
-```rust
-// In another program:
-let record = ConvergeCommitRecord::from_account(&commit_record_info)?;
+CREATE
+   ↓
+JOIN
+   ↓
+PRESENCE
+   ↓
+SIGN
+   ↓
+QUORUM
+   ↓
+SETTLE
+   ↓
+PROOF
 
-// Verify co-signature proof
-require!(record.commitment_hash == expected_hash, YourError::WrongCommitment);
-require!(record.signed_pubkeys.contains(&required_signer), YourError::MissingSignature);
-require!(record.committed_at > some_timestamp, YourError::StaleProof);
-```
+The deliberately narrow scope allows the demonstration to focus on the central idea:
 
-This makes Converge a reusable ephemeral coordination primitive for:
-- Governance approvals
-- Auction finalization
-- Agent coordination
-- Multi-party transaction authorization
-- Attendance verification
+A temporary multi-party coordination session can produce a compact permanent result.
 
----
+⸻
 
-## License
+Future Applications
 
-MIT
+The same coordination-room primitive could be extended beyond co-signing.
+
+Governance
+
+A council enters a temporary proposal room and reaches a required quorum before a governance action can execute.
+
+Auctions
+
+Bidders interact in a live auction session where high-frequency bidding state remains ephemeral and the winning outcome settles onchain.
+
+Agent Coordination
+
+Multiple autonomous agents coordinate inside a bounded execution session before committing a final decision.
+
+Attendance
+
+Participants remain present during an event or session and receive a final verifiable participation result.
+
+Multi-Party Transactions
+
+Multiple parties coordinate around a shared transaction intent and produce a final authorization record.
+
+The common pattern is always the same:
+
+TEMPORARY COORDINATION
+          ↓
+      FINAL OUTCOME
+          ↓
+    PERMANENT STATE
+
+⸻
+
+The Vision
+
+Solana is excellent at making important state permanent.
+
+Not every interaction is important enough to become permanent.
+
+Converge explores the layer in between:
+
+temporary execution for coordination, permanent settlement for outcomes.
+
+A room can exist for seconds or minutes.
+
+Participants can interact continuously.
+
+The session can disappear.
+
+What matters survives.
+
+⸻
+
+Converge
+
+Ephemeral coordination. Permanent outcomes.
+
+The room was ephemeral. The proof is permanent.
+
+Built for the MagicBlock Blitz Hackathon.
+
+MIT License
